@@ -224,6 +224,17 @@ async def ws(websocket: WebSocket) -> None:
                         "symbols": session.symbols,
                         "text": session.text,
                     }
+                elif isinstance(parsed, dict) and parsed.get("type") in ("backspace", "delete"):
+                    deleted = session.backspace()
+                    reply = {
+                        "mode": session.mode,
+                        "face": True,
+                        "score": None,
+                        "eyes_closed": False,
+                        "events": ["backspace"] if deleted else [],
+                        "symbols": session.symbols,
+                        "text": session.text,
+                    }
                 elif isinstance(parsed, dict) and parsed.get("type") == "frame" and isinstance(parsed.get("image"), str):
                     img_str = parsed["image"]
                     if "," in img_str:

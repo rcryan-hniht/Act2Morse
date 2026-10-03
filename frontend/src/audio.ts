@@ -75,6 +75,10 @@ class MorseSoundEngine {
   public playWordSpace() {
     this.playTone(60, 440);
   }
+
+  public playBackspace() {
+    this.playTone(70, 340);
+  }
 }
 
 export const morseAudio = new MorseSoundEngine();

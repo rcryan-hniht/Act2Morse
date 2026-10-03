@@ -94,6 +94,10 @@ class MorseSession:
         """Decoded text so far."""
         return self.decoder.text
 
+    def backspace(self) -> str | None:
+        """Remove last Morse symbol in progress, or last decoded character from text."""
+        return self.decoder.backspace()
+
     def reset(self) -> None:
         """Clear current symbols and decoded text."""
         self.tracker.reset()

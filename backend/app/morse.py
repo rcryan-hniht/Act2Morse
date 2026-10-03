@@ -118,6 +118,21 @@ class MorseDecoder:
         if self.text and not self.text.endswith(" "):
             self.text += " "
 
+    def backspace(self) -> str | None:
+        """Remove last Morse symbol in progress, or last decoded character from text.
+
+        Returns the removed symbol/character, or None if both are empty.
+        """
+        if self.symbols:
+            deleted = self.symbols[-1]
+            self.symbols = self.symbols[:-1]
+            return deleted
+        if self.text:
+            deleted = self.text[-1]
+            self.text = self.text[:-1]
+            return deleted
+        return None
+
     def reset(self) -> None:
         """Clear symbols of the letter in progress and all decoded text."""
         self.symbols = ""

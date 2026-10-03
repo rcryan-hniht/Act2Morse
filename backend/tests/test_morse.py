@@ -83,3 +83,30 @@ class TestMorseDecoder:
                 d.add_symbol(s)
             d.finish_letter()
         assert d.text == "SOS"
+
+    def test_backspace(self):
+        d = MorseDecoder()
+        assert d.backspace() is None
+
+        # Backspace on symbol in progress
+        d.add_symbol(".")
+        d.add_symbol("-")
+        assert d.symbols == ".-"
+        assert d.backspace() == "-"
+        assert d.symbols == "."
+
+        # Backspace to empty symbols
+        assert d.backspace() == "."
+        assert d.symbols == ""
+
+        # Backspace on decoded text
+        d.add_symbol(".")
+        d.finish_letter()  # text = "E"
+        d.add_symbol("-")
+        d.finish_letter()  # text = "ET"
+        assert d.text == "ET"
+        assert d.backspace() == "T"
+        assert d.text == "E"
+        assert d.backspace() == "E"
+        assert d.text == ""
+        assert d.backspace() is None

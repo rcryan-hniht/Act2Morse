@@ -20,6 +20,13 @@ export interface FingerTapEvent {
   timestamp: number;
 }
 
+export type HandGestureAction = 'space' | 'backspace';
+
+export interface GestureActionEvent {
+  action: HandGestureAction;
+  timestamp: number;
+}
+
 export interface CameraMetrics {
   fps: number;
   mode: 'Fin2Morse' | 'Blink2Morse';
@@ -101,9 +108,16 @@ export class CameraController {
   private backendFace: boolean = false;
   private backendEyesClosed: boolean = false;
 
+  // Gesture action tracking (fist -> space, right thumb pointing left -> backspace)
+  private fistHoldStartTime: number = 0;
+  private fistTriggered: boolean = false;
+  private thumbLeftHoldStartTime: number = 0;
+  private thumbLeftTriggered: boolean = false;
+
   private onBlinkCallbacks: Array<(event: BlinkEvent) => void> = [];
   private onFingerTapCallbacks: Array<(event: FingerTapEvent) => void> = [];
   private onPinchStateCallbacks: Array<(isPinching: boolean, elapsedMs: number) => void> = [];
+  private onGestureActionCallbacks: Array<(event: GestureActionEvent) => void> = [];
   private onMetricsCallbacks: Array<(metrics: CameraMetrics) => void> = [];
   private onFrameCallbacks: Array<(canvas: HTMLCanvasElement) => void> = [];
 
@@ -221,6 +235,11 @@ export class CameraController {
     this.isHandTapping = false;
     this.handTapStartTime = 0;
     this.detectedGestureName = '';
+    this.fistHoldStartTime = 0;
+    this.fistTriggered = false;
+    this.thumbLeftHoldStartTime = 0;
+    this.thumbLeftTriggered = false;
+    this.onPinchStateCallbacks.forEach((cb) => cb(false, 0));
     if (mode === 'Fin2Morse' && !this.gestureRecognizer) {
       this.initHandGestureModel();
     }
@@ -251,6 +270,10 @@ export class CameraController {
 
   public onPinchState(callback: (isPinching: boolean, elapsedMs: number) => void) {
     this.onPinchStateCallbacks.push(callback);
+  }
+
+  public onGestureAction(callback: (event: GestureActionEvent) => void) {
+    this.onGestureActionCallbacks.push(callback);
   }
 
   public onMetrics(callback: (metrics: CameraMetrics) => void) {
@@ -385,6 +408,10 @@ export class CameraController {
       this.isHandDetected = false;
       this.handConfidence = 0;
       this.detectedGestureName = '';
+      this.fistHoldStartTime = 0;
+      this.fistTriggered = false;
+      this.thumbLeftHoldStartTime = 0;
+      this.thumbLeftTriggered = false;
 
       if (this.isHandTapping) {
         const duration = Math.round(now - this.handTapStartTime);
@@ -535,13 +562,143 @@ export class CameraController {
         }
       }
 
-      // 3. Pinch & Micro-Tap Detection for Morse Code
+      // 3. Special Gestures Detection
+      // Key Landmark coordinates in canvas space
+      const pWrist = this.videoToCanvasCoord(landmarks[0].x, landmarks[0].y, targetW, targetH);
+      const pThumbTip = this.videoToCanvasCoord(landmarks[4].x, landmarks[4].y, targetW, targetH);
+      const pThumbMcp = this.videoToCanvasCoord(landmarks[2].x, landmarks[2].y, targetW, targetH);
+
+      const pIndexMcp = this.videoToCanvasCoord(landmarks[5].x, landmarks[5].y, targetW, targetH);
+      const pIndexPip = this.videoToCanvasCoord(landmarks[6].x, landmarks[6].y, targetW, targetH);
+      const pIndexTip = this.videoToCanvasCoord(landmarks[8].x, landmarks[8].y, targetW, targetH);
+
+      const pMiddleMcp = this.videoToCanvasCoord(landmarks[9].x, landmarks[9].y, targetW, targetH);
+      const pMiddlePip = this.videoToCanvasCoord(landmarks[10].x, landmarks[10].y, targetW, targetH);
+      const pMiddleTip = this.videoToCanvasCoord(landmarks[12].x, landmarks[12].y, targetW, targetH);
+
+      const pRingPip = this.videoToCanvasCoord(landmarks[14].x, landmarks[14].y, targetW, targetH);
+      const pRingTip = this.videoToCanvasCoord(landmarks[16].x, landmarks[16].y, targetW, targetH);
+
+      const pPinkyPip = this.videoToCanvasCoord(landmarks[18].x, landmarks[18].y, targetW, targetH);
+      const pPinkyTip = this.videoToCanvasCoord(landmarks[20].x, landmarks[20].y, targetW, targetH);
+
+      const palmScale = Math.hypot(pWrist.x - pMiddleMcp.x, pWrist.y - pMiddleMcp.y) || 60;
+
+      // Finger curl checks
+      const isIndexCurled = Math.hypot(pIndexTip.x - pWrist.x, pIndexTip.y - pWrist.y) < Math.hypot(pIndexPip.x - pWrist.x, pIndexPip.y - pWrist.y) * 1.15;
+      const isMiddleCurled = Math.hypot(pMiddleTip.x - pWrist.x, pMiddleTip.y - pWrist.y) < Math.hypot(pMiddlePip.x - pWrist.x, pMiddlePip.y - pWrist.y) * 1.15;
+      const isRingCurled = Math.hypot(pRingTip.x - pWrist.x, pRingTip.y - pWrist.y) < Math.hypot(pRingPip.x - pWrist.x, pRingPip.y - pWrist.y) * 1.15;
+      const isPinkyCurled = Math.hypot(pPinkyTip.x - pWrist.x, pPinkyTip.y - pWrist.y) < Math.hypot(pPinkyPip.x - pWrist.x, pPinkyPip.y - pWrist.y) * 1.15;
+      const areFingersCurled = isIndexCurled && isMiddleCurled && isRingCurled && isPinkyCurled;
+
+      // GESTURE 1: Closed Fist (Nắm tay lại) → Dấu cách (Space)
+      const distThumbToIndex = Math.hypot(pThumbTip.x - pIndexMcp.x, pThumbTip.y - pIndexMcp.y);
+      const isThumbTucked = distThumbToIndex < palmScale * 0.85;
+      const isModelFist = topGesture?.categoryName === 'Closed_Fist';
+      const isFist = isModelFist || (areFingersCurled && isThumbTucked);
+
+      // GESTURE 2: Right Thumb Pointing Left (Ngón cái tay phải chỉ qua trái) → Trừ 1 ký tự (Backspace)
+      const handedness = results.handedness && results.handedness[h] && results.handedness[h].length > 0 ? results.handedness[h][0] : null;
+      const thumbDx = pThumbTip.x - pThumbMcp.x;
+      const thumbDy = pThumbTip.y - pThumbMcp.y;
+      const thumbLength = Math.hypot(thumbDx, thumbDy);
+      const isRightHand = !handedness || handedness.categoryName.toLowerCase() === 'right' || handedness.score < 0.65;
+
+      const isThumbPointingLeft =
+        isRightHand &&
+        !isFist &&
+        thumbDx < -0.30 * palmScale &&
+        Math.abs(thumbDx) > Math.abs(thumbDy) * 0.80 &&
+        thumbLength > 0.40 * palmScale &&
+        pThumbTip.x < pIndexMcp.x - 0.10 * palmScale &&
+        isIndexCurled &&
+        isMiddleCurled;
+
+      if (isFist) {
+        if (this.fistHoldStartTime === 0) {
+          this.fistHoldStartTime = now;
+        }
+        const fistElapsed = now - this.fistHoldStartTime;
+        if (fistElapsed >= 260 && !this.fistTriggered) {
+          this.fistTriggered = true;
+          this.onGestureActionCallbacks.forEach((cb) => cb({ action: 'space', timestamp: now }));
+        }
+
+        ctx.save();
+        ctx.fillStyle = this.fistTriggered ? 'rgba(16, 185, 129, 0.28)' : 'rgba(0, 255, 255, 0.20)';
+        ctx.beginPath();
+        ctx.arc(pMiddleMcp.x, pMiddleMcp.y, Math.round(35 * dpr), 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = this.fistTriggered ? '#10B981' : '#00FFFF';
+        ctx.lineWidth = Math.round(2 * dpr);
+        ctx.beginPath();
+        ctx.arc(pMiddleMcp.x, pMiddleMcp.y, Math.round(35 * dpr), 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = this.fistTriggered ? '#10B981' : '#00FFFF';
+        ctx.font = `bold ${Math.round(11 * dpr)}px 'Inter', sans-serif`;
+        ctx.textAlign = 'center';
+        const fistText = this.fistTriggered ? '✊ CLOSED FIST → SPACE' : `✊ FIST HOLD (${Math.round(fistElapsed)}ms)`;
+        ctx.fillText(fistText, pMiddleMcp.x, pMiddleMcp.y - Math.round(42 * dpr));
+        ctx.restore();
+      } else {
+        this.fistHoldStartTime = 0;
+        this.fistTriggered = false;
+      }
+
+      if (isThumbPointingLeft) {
+        if (this.thumbLeftHoldStartTime === 0) {
+          this.thumbLeftHoldStartTime = now;
+        }
+        const thumbElapsed = now - this.thumbLeftHoldStartTime;
+        if (thumbElapsed >= 260 && !this.thumbLeftTriggered) {
+          this.thumbLeftTriggered = true;
+          this.onGestureActionCallbacks.forEach((cb) => cb({ action: 'backspace', timestamp: now }));
+        }
+
+        ctx.save();
+        ctx.fillStyle = this.thumbLeftTriggered ? 'rgba(239, 68, 68, 0.28)' : 'rgba(245, 158, 11, 0.20)';
+        ctx.beginPath();
+        ctx.arc(pThumbTip.x, pThumbTip.y, Math.round(22 * dpr), 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = this.thumbLeftTriggered ? '#EF4444' : '#F59E0B';
+        ctx.lineWidth = Math.round(2 * dpr);
+        ctx.beginPath();
+        ctx.arc(pThumbTip.x, pThumbTip.y, Math.round(22 * dpr), 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Left Arrow at thumb tip (👈 Backspace)
+        ctx.strokeStyle = this.thumbLeftTriggered ? '#EF4444' : '#F59E0B';
+        ctx.lineWidth = Math.round(2.5 * dpr);
+        ctx.beginPath();
+        ctx.moveTo(pThumbTip.x - Math.round(10 * dpr), pThumbTip.y);
+        ctx.lineTo(pThumbTip.x + Math.round(8 * dpr), pThumbTip.y);
+        ctx.moveTo(pThumbTip.x - Math.round(10 * dpr), pThumbTip.y);
+        ctx.lineTo(pThumbTip.x - Math.round(4 * dpr), pThumbTip.y - Math.round(5 * dpr));
+        ctx.moveTo(pThumbTip.x - Math.round(10 * dpr), pThumbTip.y);
+        ctx.lineTo(pThumbTip.x - Math.round(4 * dpr), pThumbTip.y + Math.round(5 * dpr));
+        ctx.stroke();
+
+        ctx.fillStyle = this.thumbLeftTriggered ? '#EF4444' : '#F59E0B';
+        ctx.font = `bold ${Math.round(11 * dpr)}px 'Inter', sans-serif`;
+        ctx.textAlign = 'right';
+        const thumbText = this.thumbLeftTriggered ? '⌫ THUMB LEFT → BACKSPACE' : `⌫ HOLD THUMB LEFT (${Math.round(thumbElapsed)}ms)`;
+        ctx.fillText(thumbText, pThumbTip.x - Math.round(16 * dpr), pThumbTip.y - Math.round(12 * dpr));
+        ctx.restore();
+      } else {
+        this.thumbLeftHoldStartTime = 0;
+        this.thumbLeftTriggered = false;
+      }
+
+      // 4. Pinch & Micro-Tap Detection for Morse Code
       // Measures distance between Thumb Tip (4) and Index Tip (8)
       const thumbTip = landmarks[4];
       const indexTip = landmarks[8];
       const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
 
-      const isPinching = pinchDist < 0.082;
+      const isPinching = (!isFist && !isThumbPointingLeft) && pinchDist < 0.082;
       const ptThumb = this.videoToCanvasCoord(thumbTip.x, thumbTip.y, targetW, targetH);
       const ptIndex = this.videoToCanvasCoord(indexTip.x, indexTip.y, targetW, targetH);
       const midX = (ptThumb.x + ptIndex.x) / 2;

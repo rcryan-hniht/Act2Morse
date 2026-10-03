@@ -183,6 +183,10 @@ export class BlinkWebSocketBridge {
     this.send({ type: 'finalize' });
   }
 
+  public sendBackspace() {
+    this.send({ type: 'backspace' });
+  }
+
   /**
    * Stream a video frame canvas to backend as binary JPEG with backpressure.
    * Drops frame if previous inference is still in-flight to prevent lag.

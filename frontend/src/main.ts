@@ -7,7 +7,7 @@ import {
   DEFAULT_THRESHOLDS,
 } from './morse.ts';
 import { morseAudio } from './audio.ts';
-import { cameraController, type CameraMetrics, type BlinkEvent, type FingerTapEvent } from './camera.ts';
+import { cameraController, type CameraMetrics, type BlinkEvent, type FingerTapEvent, type GestureActionEvent } from './camera.ts';
 import { wsBridge, type ConnectionStatus, type BackendResponse, type BackendMessage } from './ws.ts';
 
 // State management
@@ -384,6 +384,67 @@ cameraController.onFingerTap((event: FingerTapEvent) => {
 cameraController.onBlink((event: BlinkEvent) => {
   if (!wsBridge.isConnected() && currentMode === 'Blink2Morse') {
     handleBlinkEvent(event);
+  }
+});
+
+// Handle camera hand gestures (Closed Fist -> Space, Right Thumb Left -> Backspace)
+cameraController.onGestureAction((event: GestureActionEvent) => {
+  if (currentMode !== 'Fin2Morse') return;
+
+  if (event.action === 'space') {
+    finalizeCharacter();
+    if (decodedText.length > 0 && !decodedText.endsWith(' ')) {
+      decodedText += ' ';
+      morseAudio.playWordSpace();
+      updateDisplay();
+      floatingBarStatus.textContent = 'Gesture: Space (✊ Closed Fist)';
+      floatingBarSub.textContent = 'Word space added via closed fist gesture';
+      flashCameraStatus('SPACE (✊)');
+      showToast('␣ Space added (✊ Closed Fist)');
+      if (wsBridge.isConnected()) {
+        wsBridge.sendSpace();
+      }
+    }
+  } else if (event.action === 'backspace') {
+    cancelPendingFinalizeTimers();
+    let deletedLabel = '';
+
+    if (currentMorseBuffer.length > 0) {
+      const removed = currentMorseBuffer.slice(-1);
+      currentMorseBuffer = currentMorseBuffer.slice(0, -1);
+      deletedLabel = `Morse '${removed === '.' ? '•' : '—'}'`;
+      morseAudio.playBackspace();
+      flashCameraStatus('BACKSPACE (⌫)');
+      floatingBarStatus.textContent = `Gesture: Deleted ${deletedLabel} (👈 Thumb Left)`;
+      floatingBarSub.textContent = currentMorseBuffer.length > 0
+        ? `Buffer: ${currentMorseBuffer} → Potential: ${decodeMorseSequence(currentMorseBuffer)}`
+        : 'Morse buffer empty';
+      showToast(`⌫ Deleted ${deletedLabel} (👈 Thumb Left)`);
+
+      // Restart letter finalize timer if buffer still contains symbols
+      if (currentMorseBuffer.length > 0) {
+        letterTimeoutId = window.setTimeout(() => {
+          finalizeCharacter();
+        }, getLetterPauseMs());
+      }
+    } else if (decodedText.length > 0) {
+      const removed = decodedText.slice(-1);
+      decodedText = decodedText.slice(0, -1);
+      deletedLabel = removed === ' ' ? 'Space' : `'${removed}'`;
+      morseAudio.playBackspace();
+      flashCameraStatus('BACKSPACE (⌫)');
+      floatingBarStatus.textContent = `Gesture: Deleted ${deletedLabel} (👈 Thumb Left)`;
+      floatingBarSub.textContent = `Decoded: "${decodedText}"`;
+      showToast(`⌫ Deleted ${deletedLabel} (👈 Thumb Left)`);
+    } else {
+      showToast('Buffer already empty');
+    }
+
+    updateDisplay();
+
+    if (wsBridge.isConnected()) {
+      wsBridge.sendBackspace();
+    }
   }
 });
 
