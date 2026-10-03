@@ -9,9 +9,16 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'er
 export type MorseEvent = 'dot' | 'dash' | 'letter_gap' | 'word_gap';
 
 export interface BackendResponse {
+  mode?: 'Fin2Morse' | 'Blink2Morse';
+  model?: string;
   face: boolean;
   score: number | null;
   eyes_closed: boolean;
+  hand_detected?: boolean;
+  hand_confidence?: number;
+  is_finger_tapping?: boolean;
+  landmarks?: number[][];
+  gesture?: string;
   events: MorseEvent[];
   symbols: string;
   text: string;
@@ -158,6 +165,10 @@ export class BlinkWebSocketBridge {
 
   public sendReset() {
     this.send({ type: 'reset' });
+  }
+
+  public sendMode(mode: 'Fin2Morse' | 'Blink2Morse') {
+    this.send({ type: 'set_mode', mode });
   }
 
   public sendSymbol(symbol: '.' | '-') {

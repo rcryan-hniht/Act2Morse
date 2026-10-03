@@ -30,6 +30,9 @@ def _env_int(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     model_path: str
+    eye_model_path: str
+    hand_model_path: str
+    palm_model_path: str
     allowed_origins: tuple[str, ...]
     # Hysteresis: eyes close above close_threshold, reopen below open_threshold.
     close_threshold: float
@@ -49,6 +52,18 @@ def load_settings() -> Settings:
     return Settings(
         model_path=os.environ.get(
             "MODEL_PATH", os.path.join(_BACKEND_DIR, "models", "face_landmarker.task")
+        ),
+        eye_model_path=os.environ.get(
+            "EYE_MODEL_PATH",
+            os.path.join(_BACKEND_DIR, "models", "eye_classification_mobilenetv2.onnx"),
+        ),
+        hand_model_path=os.environ.get(
+            "HAND_MODEL_PATH",
+            os.path.join(_BACKEND_DIR, "models", "handpose_estimation_mediapipe_2023feb.onnx"),
+        ),
+        palm_model_path=os.environ.get(
+            "PALM_MODEL_PATH",
+            os.path.join(_BACKEND_DIR, "models", "palm_detection_mediapipe_2023feb.onnx"),
         ),
         allowed_origins=tuple(o.strip() for o in origins_raw.split(",") if o.strip()),
         close_threshold=_env_float("CLOSE_THRESHOLD", 0.5),   # was 0.6; lighter blinks reach ~0.5

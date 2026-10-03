@@ -19,24 +19,25 @@ Communication is a fundamental human right. However, millions of people worldwid
 ## ✨ Key Features
 
 - **Hands-Free Eye Tracking (Blink2Morse)**:
-  - Powered by **MediaPipe Face Landmarker** running at 25–30 FPS with high-precision blendshape extraction (`eyeBlinkLeft`, `eyeBlinkRight`).
+  - Powered by **`MichalMlodawski/open-closed-eye-classification-mobilev2`** running at 25–30 FPS for high-precision eye open/closed classification, assisted by face landmark tracking.
   - Adaptive thresholding distinguishing natural involuntary blinks from intentional Morse signals.
   - **Dot (`•`)**: Short deliberate blink (80ms – 600ms).
   - **Dash (`—`)**: Long deliberate closure (> 600ms).
   - **Automatic Letter Gap**: Pausing with eyes open for ~1.2s automatically finishes the current letter.
   - **Automatic Word Space**: Pausing with eyes open for ~2.5s inserts a word boundary space.
 
-- **Tactile Micro-Tap Mode (Fin2Morse)**:
-  - Designed for tactile communication using assistive switches, touchscreens, or keyboard keys.
+- **Hand & Finger Micro-Tap Tracking (Fin2Morse)**:
+  - Powered by **`opencv/handpose_estimation_mediapipe`** tracking 21 3D hand keypoints in real time.
+  - Detects thumb-to-index micro-pinch / tactile switch presses and translates them into Morse dots and dashes.
   - Press duration timing: quick tap (< 380ms) for Dot, sustained press (> 380ms) for Dash.
 
 - **Dual-Engine Architecture (Cloud/Server AI + Local Fallback)**:
-  - **AI Backend Mode**: Streams video frames over a low-latency WebSocket to a Python FastAPI backend running MediaPipe for sub-millimeter landmark precision.
-  - **Client-Side Vision Fallback**: If the server is offline, an in-browser computer vision heuristic monitors eye contrast and pupil gradient locally without requiring an active server connection.
+  - **AI Backend Mode**: Streams video frames over a low-latency WebSocket to a Python FastAPI backend running `MichalMlodawski/open-closed-eye-classification-mobilev2` (Blink mode) and `opencv/handpose_estimation_mediapipe` (Fin mode).
+  - **Client-Side Vision Fallback**: If the server is offline, in-browser computer vision monitors eyes and hand gestures locally without requiring an active server connection.
 
 - **Auditory & Visual Feedback**:
   - Web Audio API tone synthesizer providing distinct acoustic beeps for dots (high pitch), dashes, and character completion.
-  - Live Retinal HUD with real-time Eye Aspect Ratio (EAR) metric bar, face-locking targeting reticle, and blink status indicators.
+  - Live Retinal & Hand HUD with real-time metrics, targeting reticle, skeletal bones (white), joints (cyan), and status indicators.
 
 - **Interactive Side Morse Chart**:
   - Full international alphanumeric reference chart (A–Z, 0–9) placed directly beside the live camera feed for immediate practice and reference.
@@ -64,7 +65,8 @@ Communication is a fundamental human right. However, millions of people worldwid
 │                 Act2Morse Backend                      │
 │                (FastAPI + Python)                      │
 │                                                        │
-│   EyeDetector: MediaPipe Face Landmarker (VIDEO mode)  │
+│   Blink Mode: MichalMlodawski MobileNetV2 Eye Classifier│
+│   Fin Mode: opencv/handpose_estimation_mediapipe       │
 │   BlinkTracker: Timing state machine (Dot/Dash/Gaps)   │
 │   MorseDecoder: Alphanumeric symbol buffer             │
 └────────────────────────────────────────────────────────┘
@@ -99,7 +101,7 @@ uv sync
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The backend server will download the MediaPipe `face_landmarker.task` model automatically on first launch and serve the WebSocket endpoint at:
+The backend server will download the models automatically on first launch (`MichalMlodawski/open-closed-eye-classification-mobilev2` for Blink mode and `opencv/handpose_estimation_mediapipe` for Fin mode) and serve the WebSocket endpoint at:
 `ws://localhost:8000/ws`
 
 ---

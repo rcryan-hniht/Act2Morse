@@ -22,8 +22,14 @@ COPY pyproject.toml uv.lock* ./
 # Install project dependencies
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Pre-download face_landmarker model into models/ so it's baked into the image
+# Pre-download models into models/ so they are baked into the image
 RUN mkdir -p models && \
+    curl -fsSL https://huggingface.co/MichalMlodawski/open-closed-eye-classification-mobilev2/resolve/main/model.onnx \
+    -o models/eye_classification_mobilenetv2.onnx && \
+    curl -fsSL https://huggingface.co/opencv/handpose_estimation_mediapipe/resolve/main/handpose_estimation_mediapipe_2023feb.onnx \
+    -o models/handpose_estimation_mediapipe_2023feb.onnx && \
+    curl -fsSL https://huggingface.co/opencv/palm_detection_mediapipe/resolve/main/palm_detection_mediapipe_2023feb.onnx \
+    -o models/palm_detection_mediapipe_2023feb.onnx && \
     curl -fsSL https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task \
     -o models/face_landmarker.task
 
@@ -34,6 +40,9 @@ COPY app ./app
 ENV PATH="/app/.venv/bin:$PATH"
 ENV HOST=0.0.0.0
 ENV PORT=8000
+ENV EYE_MODEL_PATH=/app/models/eye_classification_mobilenetv2.onnx
+ENV HAND_MODEL_PATH=/app/models/handpose_estimation_mediapipe_2023feb.onnx
+ENV PALM_MODEL_PATH=/app/models/palm_detection_mediapipe_2023feb.onnx
 ENV MODEL_PATH=/app/models/face_landmarker.task
 ENV ALLOWED_ORIGINS=*
 

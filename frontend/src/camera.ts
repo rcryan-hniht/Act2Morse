@@ -543,7 +543,7 @@ export class CameraController {
 
     ctx.font = `600 ${Math.round(10 * dpr)}px 'JetBrains Mono', monospace`;
     ctx.fillStyle = '#00FFFF';
-    ctx.fillText('FIN2MORSE • MODEL: hand_gesture.task', barX, barY - Math.round(6 * dpr));
+    ctx.fillText('FIN2MORSE • opencv/handpose_estimation_mediapipe', barX, barY - Math.round(6 * dpr));
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.beginPath();
@@ -705,7 +705,7 @@ export class CameraController {
 
     ctx.font = `400 ${Math.round(10 * dpr)}px 'Inter', sans-serif`;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.fillText('Model: hand_gesture.task (Bones: White | Points: Cyan)', targetW / 2, boxY + boxH / 2 + Math.round(14 * dpr));
+    ctx.fillText('Model: opencv/handpose_estimation_mediapipe (Bones: White | Points: Cyan)', targetW / 2, boxY + boxH / 2 + Math.round(14 * dpr));
 
     ctx.restore();
   }
@@ -948,7 +948,7 @@ export class CameraController {
     ctx.font = `500 ${Math.round(10 * dpr)}px 'JetBrains Mono', monospace`;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
     const statusPrefix = this.backendConnected
-      ? (isFaceDetected ? (isBlinking ? 'HF/AI: CLOSED' : 'HF/AI: OPEN') : 'AI: NO FACE')
+      ? (isFaceDetected ? (isBlinking ? 'AI (MichalMlodawski): CLOSED' : 'AI (MichalMlodawski): OPEN') : 'AI: NO FACE')
       : (isBlinking ? 'LOCAL: BLINK' : 'LOCAL: OPEN');
     ctx.fillText(`${statusPrefix} (${displayScore.toFixed(2)})`, barX, barY - Math.round(5 * dpr));
 

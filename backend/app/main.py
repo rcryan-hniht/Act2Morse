@@ -1,9 +1,11 @@
 """FastAPI app: CORS, /health, and the /ws WebSocket endpoint.
 
-One EyeDetector + MorseSession per WebSocket connection. Frames are run
-through ``asyncio.to_thread`` because MediaPipe is CPU-bound; the server
-replies once per received message (backpressure: the client waits for the
-reply before sending the next frame).
+Dual-mode AI vision inference:
+- Blink Mode: Uses MichalMlodawski/open-closed-eye-classification-mobilev2
+- Fin Mode: Uses opencv/handpose_estimation_mediapipe
+
+Frames are processed in separate threads using ``asyncio.to_thread`` with
+backpressure control.
 """
 
 from __future__ import annotations
@@ -12,15 +14,15 @@ import asyncio
 import base64
 import json
 import time
-
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import load_settings
-from app.detector import EyeDetector, ensure_model
+from app.detector import EyeDetector, ensure_eye_model, ensure_model
+from app.handpose import HandPoseDetector, ensure_hand_models
 from app.session import MorseSession
 
 settings = load_settings()
@@ -28,7 +30,9 @@ settings = load_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    # Ensure model is available on startup
+    # Ensure all AI models are ready on startup
+    await asyncio.to_thread(ensure_eye_model, settings.eye_model_path)
+    await asyncio.to_thread(ensure_hand_models, settings.hand_model_path, settings.palm_model_path)
     await asyncio.to_thread(ensure_model, settings.model_path)
     yield
 
@@ -44,34 +48,78 @@ app.add_middleware(
 
 
 @app.get("/health")
-async def health() -> dict[str, bool]:
+async def health() -> dict[str, Any]:
     """Uptime check; also used by the frontend to wake a sleeping host."""
-    return {"ok": True}
+    return {
+        "ok": True,
+        "blink_model": "MichalMlodawski/open-closed-eye-classification-mobilev2",
+        "fin_model": "opencv/handpose_estimation_mediapipe",
+    }
 
 
-async def _handle_frame(
+async def _handle_blink_frame(
     detector: EyeDetector, session: MorseSession, data: bytes
 ) -> dict[str, object]:
-    """Detect and decode one JPEG frame; builds the reply message."""
+    """Detect and decode one JPEG frame in Blink mode using
+    MichalMlodawski/open-closed-eye-classification-mobilev2.
+    """
     score = await asyncio.to_thread(detector.blink_score, data)
     now_ms = int(time.monotonic() * 1000)
     events = session.process(score, now_ms)
 
     return {
+        "mode": "Blink2Morse",
+        "model": "MichalMlodawski/open-closed-eye-classification-mobilev2",
         "face": score is not None,
         "score": score,
         "eyes_closed": bool(score is not None and session.eyes_closed),
         "events": events,
         "symbols": session.symbols,
         "text": session.text,
+        "hand_detected": False,
+        "hand_confidence": 0.0,
+        "is_finger_tapping": False,
+    }
+
+
+async def _handle_fin_frame(
+    detector: HandPoseDetector, session: MorseSession, data: bytes
+) -> dict[str, object]:
+    """Detect and decode one JPEG frame in Fin mode using
+    opencv/handpose_estimation_mediapipe.
+    """
+    now_ms = int(time.monotonic() * 1000)
+    hand_res = await asyncio.to_thread(detector.process_frame, data, now_ms)
+
+    events: list[str] = []
+    symbol = hand_res.get("symbol")
+    if symbol in (".", "-"):
+        session.decoder.add_symbol(symbol)
+        events.append("dot" if symbol == "." else "dash")
+
+    return {
+        "mode": "Fin2Morse",
+        "model": "opencv/handpose_estimation_mediapipe",
+        "hand_detected": hand_res["hand_detected"],
+        "hand_confidence": hand_res["confidence"],
+        "is_finger_tapping": hand_res["is_finger_tapping"],
+        "landmarks": hand_res.get("landmarks", []),
+        "gesture": hand_res.get("gesture", ""),
+        "events": events,
+        "symbols": session.symbols,
+        "text": session.text,
+        "face": False,
+        "score": None,
+        "eyes_closed": False,
     }
 
 
 @app.websocket("/ws")
 async def ws(websocket: WebSocket) -> None:
-    """Decode blinks to Morse for one connection."""
+    """Real-time Morse decoder supporting Blink mode and Fin mode."""
     await websocket.accept()
-    detector = EyeDetector(settings.model_path)
+    eye_detector = EyeDetector(settings.eye_model_path, face_landmarker_path=settings.model_path)
+    hand_detector = HandPoseDetector(settings.hand_model_path, settings.palm_model_path)
     session = MorseSession(
         close_threshold=settings.close_threshold,
         open_threshold=settings.open_threshold,
@@ -89,19 +137,47 @@ async def ws(websocket: WebSocket) -> None:
                 break
 
             if (data := message.get("bytes")) is not None:
-                reply = await _handle_frame(detector, session, data)
+                if session.mode == "Fin2Morse":
+                    reply = await _handle_fin_frame(hand_detector, session, data)
+                else:
+                    reply = await _handle_blink_frame(eye_detector, session, data)
             elif (text_msg := message.get("text")) is not None:
                 try:
                     parsed = json.loads(text_msg)
                 except (json.JSONDecodeError, TypeError):
                     parsed = None
 
-                if isinstance(parsed, dict) and parsed.get("type") == "reset":
-                    session.reset()
+                if isinstance(parsed, dict) and parsed.get("type") in ("mode", "set_mode"):
+                    mode_val = str(parsed.get("mode", ""))
+                    session.set_mode(mode_val)
                     reply = {
+                        "type": "mode_changed",
+                        "mode": session.mode,
+                        "model": (
+                            "opencv/handpose_estimation_mediapipe"
+                            if session.mode == "Fin2Morse"
+                            else "MichalMlodawski/open-closed-eye-classification-mobilev2"
+                        ),
                         "face": False,
                         "score": None,
                         "eyes_closed": False,
+                        "hand_detected": False,
+                        "hand_confidence": 0.0,
+                        "is_finger_tapping": False,
+                        "events": [],
+                        "symbols": session.symbols,
+                        "text": session.text,
+                    }
+                elif isinstance(parsed, dict) and parsed.get("type") == "reset":
+                    session.reset()
+                    reply = {
+                        "mode": session.mode,
+                        "face": False,
+                        "score": None,
+                        "eyes_closed": False,
+                        "hand_detected": False,
+                        "hand_confidence": 0.0,
+                        "is_finger_tapping": False,
                         "events": [],
                         "symbols": session.symbols,
                         "text": session.text,
@@ -110,16 +186,16 @@ async def ws(websocket: WebSocket) -> None:
                     sym = parsed.get("symbol")
                     events: list[str] = []
                     if sym in (".", "-"):
-                        if sym == ".":
-                            session.decoder.add_symbol(".")
-                            events.append("dot")
-                        else:
-                            session.decoder.add_symbol("-")
-                            events.append("dash")
+                        session.decoder.add_symbol(sym)
+                        events.append("dot" if sym == "." else "dash")
                     reply = {
+                        "mode": session.mode,
                         "face": True,
                         "score": None,
                         "eyes_closed": False,
+                        "hand_detected": True,
+                        "hand_confidence": 1.0,
+                        "is_finger_tapping": False,
                         "events": events,
                         "symbols": session.symbols,
                         "text": session.text,
@@ -128,6 +204,7 @@ async def ws(websocket: WebSocket) -> None:
                     session.decoder.finish_letter()
                     session.decoder.add_word_gap()
                     reply = {
+                        "mode": session.mode,
                         "face": True,
                         "score": None,
                         "eyes_closed": False,
@@ -138,6 +215,7 @@ async def ws(websocket: WebSocket) -> None:
                 elif isinstance(parsed, dict) and parsed.get("type") in ("finalize", "letter_gap"):
                     char = session.decoder.finish_letter()
                     reply = {
+                        "mode": session.mode,
                         "face": True,
                         "score": None,
                         "eyes_closed": False,
@@ -151,18 +229,24 @@ async def ws(websocket: WebSocket) -> None:
                         img_str = img_str.split(",", 1)[1]
                     try:
                         frame_bytes = base64.b64decode(img_str)
-                        reply = await _handle_frame(detector, session, frame_bytes)
+                        if session.mode == "Fin2Morse":
+                            reply = await _handle_fin_frame(hand_detector, session, frame_bytes)
+                        else:
+                            reply = await _handle_blink_frame(eye_detector, session, frame_bytes)
                     except Exception:
                         reply = {
+                            "mode": session.mode,
                             "face": False,
                             "score": None,
                             "eyes_closed": False,
+                            "hand_detected": False,
                             "events": [],
                             "symbols": session.symbols,
                             "text": session.text,
                         }
                 else:
                     reply = {
+                        "mode": session.mode,
                         "face": False,
                         "score": None,
                         "eyes_closed": False,
@@ -171,7 +255,7 @@ async def ws(websocket: WebSocket) -> None:
                         "text": session.text,
                     }
             else:
-                continue  # Empty message: nothing to answer.
+                continue
 
             await websocket.send_json(reply)
     except WebSocketDisconnect:

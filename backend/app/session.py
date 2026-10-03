@@ -27,6 +27,7 @@ class MorseSession:
     dot_max_ms: int
     letter_gap_ms: int
     word_gap_ms: int
+    mode: str = "Blink2Morse"
 
     def __post_init__(self) -> None:
         self.tracker = BlinkTracker(
@@ -38,6 +39,14 @@ class MorseSession:
             word_gap_ms=self.word_gap_ms,
         )
         self.decoder = MorseDecoder()
+
+    def set_mode(self, mode: str) -> None:
+        """Set active operation mode: 'Fin2Morse' or 'Blink2Morse'."""
+        clean = mode.strip().lower()
+        if "fin" in clean:
+            self.mode = "Fin2Morse"
+        else:
+            self.mode = "Blink2Morse"
 
     def process(self, score: float | None, now_ms: int) -> list[str]:
         """Process one frame; returns events triggered by this frame.
