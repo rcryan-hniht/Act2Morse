@@ -40,7 +40,10 @@ function resolveDefaultWsUrl(): string {
 }
 
 export class BlinkWebSocketBridge {
-  private url: string;
+  private primaryUrl: string;
+  private currentUrl: string;
+  private fallbackUrl: string | null = null;
+  private failedAttempts: number = 0;
   private ws: WebSocket | null = null;
   private reconnectInterval: number = 3500;
   private shouldReconnect: boolean = true;
@@ -54,7 +57,11 @@ export class BlinkWebSocketBridge {
   private responseTimeoutId: number | null = null;
 
   constructor(url?: string) {
-    this.url = url || resolveDefaultWsUrl();
+    this.primaryUrl = url || resolveDefaultWsUrl();
+    this.currentUrl = this.primaryUrl;
+    if (this.primaryUrl.includes('act2morse.onrender.com')) {
+      this.fallbackUrl = this.primaryUrl.replace('act2morse.onrender.com', 'blink2morse.onrender.com');
+    }
   }
 
   public isConnected(): boolean {
@@ -66,12 +73,13 @@ export class BlinkWebSocketBridge {
     this.setStatus('connecting');
 
     try {
-      this.ws = new WebSocket(this.url);
+      this.ws = new WebSocket(this.currentUrl);
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = () => {
         this.setStatus('connected');
         this.isAwaitingResponse = false;
+        this.failedAttempts = 0;
       };
 
       this.ws.onmessage = (event) => {
@@ -98,6 +106,17 @@ export class BlinkWebSocketBridge {
       this.ws.onclose = () => {
         this.setStatus('disconnected');
         this.isAwaitingResponse = false;
+        this.failedAttempts++;
+
+        // If primary url fails to connect 2 times, fallback to legacy URL until primary comes alive
+        if (this.failedAttempts >= 2 && this.fallbackUrl && this.currentUrl === this.primaryUrl) {
+          this.currentUrl = this.fallbackUrl;
+        } else if (this.failedAttempts >= 6 && this.currentUrl === this.fallbackUrl) {
+          // Periodically re-try primary
+          this.currentUrl = this.primaryUrl;
+          this.failedAttempts = 0;
+        }
+
         if (this.shouldReconnect) {
           setTimeout(() => this.connect(), this.reconnectInterval);
         }
