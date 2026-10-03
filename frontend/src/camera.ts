@@ -1,10 +1,13 @@
 /**
  * Webcam Manager and Real-time Gesture Engine for Act2Morse.
- * Supports dual-mode vision processing:
- *  - Fin2Morse: Pure Hand & Finger Micro-Tap Tracking (completely ignores face & eyes).
+ * Dual-mode vision pipeline:
+ *  - Fin2Morse: Hand Gesture & Landmark tracking powered by `hand_gesture.task` (MediaPipe Tasks Vision).
+ *               Renders finger bones / connections in WHITE and finger landmark joints in CYAN.
+ *               Completely ignores face and eyes.
  *  - Blink2Morse: Eye Blink Tracking via facial landmarks / local EAR vision.
- * Uses hardware-accelerated video rendering and an offscreen canvas pipeline for retina-sharp HUD overlay.
  */
+
+import { FilesetResolver, GestureRecognizer, type GestureRecognizerResult } from '@mediapipe/tasks-vision';
 
 export interface BlinkEvent {
   durationMs: number;
@@ -28,7 +31,26 @@ export interface CameraMetrics {
   isHandDetected: boolean;
   isFingerTapping: boolean;
   handConfidence: number;
+  gestureName?: string;
 }
+
+/**
+ * MediaPipe 21-Landmark Hand Skeleton Connections (Phalanges & Knuckles)
+ */
+export const HAND_CONNECTIONS: [number, number][] = [
+  // Thumb
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  // Index finger
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  // Middle finger
+  [9, 10], [10, 11], [11, 12],
+  // Ring finger
+  [13, 14], [14, 15], [15, 16],
+  // Pinky finger
+  [0, 17], [17, 18], [18, 19], [19, 20],
+  // Knuckle connections (palm arch)
+  [5, 9], [9, 13], [13, 17],
+];
 
 export class CameraController {
   private videoEl: HTMLVideoElement | null = null;
@@ -47,6 +69,12 @@ export class CameraController {
   private isRunning: boolean = false;
   private currentMode: 'Fin2Morse' | 'Blink2Morse' = 'Fin2Morse';
 
+  // MediaPipe Hand Gesture Model (`hand_gesture.task`)
+  private gestureRecognizer: GestureRecognizer | null = null;
+  private isModelLoading: boolean = false;
+  private lastRecognizeTime: number = 0;
+  private detectedGestureName: string = '';
+
   // Eye tracking state (Blink2Morse)
   private isBlinkActive: boolean = false;
   private blinkStartTime: number = 0;
@@ -59,10 +87,6 @@ export class CameraController {
   // Hand & Finger tracking state (Fin2Morse)
   private isHandDetected: boolean = false;
   private handConfidence: number = 0;
-  private handBox: { x: number; y: number; w: number; h: number } | null = null;
-  private fingertipPoint: { x: number; y: number } | null = null;
-  private smoothFingertipY: number = 0;
-  private handBaselineY: number = 0;
   private isHandTapping: boolean = false;
   private handTapStartTime: number = 0;
 
@@ -82,7 +106,49 @@ export class CameraController {
   private onMetricsCallbacks: Array<(metrics: CameraMetrics) => void> = [];
   private onFrameCallbacks: Array<(canvas: HTMLCanvasElement) => void> = [];
 
-  constructor() {}
+  constructor() {
+    // Preload hand_gesture.task in the background
+    this.initHandGestureModel();
+  }
+
+  /**
+   * Initializes the MediaPipe Gesture Recognizer using hand_gesture.task
+   */
+  private async initHandGestureModel() {
+    if (this.gestureRecognizer || this.isModelLoading) return;
+    this.isModelLoading = true;
+
+    try {
+      const vision = await FilesetResolver.forVisionTasks(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+      );
+
+      // Try local asset first, then fallback to cloud URL if needed
+      try {
+        this.gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: '/models/hand_gesture.task',
+            delegate: 'GPU',
+          },
+          runningMode: 'VIDEO',
+          numHands: 2,
+        });
+      } catch {
+        this.gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task',
+            delegate: 'CPU',
+          },
+          runningMode: 'VIDEO',
+          numHands: 2,
+        });
+      }
+    } catch (err) {
+      console.warn('Could not initialize hand_gesture.task via WebAssembly:', err);
+    } finally {
+      this.isModelLoading = false;
+    }
+  }
 
   public async start(video: HTMLVideoElement, canvas: HTMLCanvasElement): Promise<boolean> {
     this.videoEl = video;
@@ -109,8 +175,11 @@ export class CameraController {
       this.isBlinkActive = false;
       this.isHandDetected = false;
       this.isHandTapping = false;
-      this.smoothFingertipY = 0;
-      this.handBaselineY = 0;
+
+      // Ensure model is loaded
+      if (!this.gestureRecognizer) {
+        this.initHandGestureModel();
+      }
 
       this.loop();
       return true;
@@ -150,8 +219,10 @@ export class CameraController {
     this.isHandDetected = false;
     this.isHandTapping = false;
     this.handTapStartTime = 0;
-    this.smoothFingertipY = 0;
-    this.handBaselineY = 0;
+    this.detectedGestureName = '';
+    if (mode === 'Fin2Morse' && !this.gestureRecognizer) {
+      this.initHandGestureModel();
+    }
   }
 
   public getMode(): 'Fin2Morse' | 'Blink2Morse' {
@@ -195,7 +266,6 @@ export class CameraController {
     }
     this.lastFrameTime = now;
 
-    // Process frame according to active mode
     this.processFrame();
 
     this.animFrameId = requestAnimationFrame(this.loop);
@@ -230,7 +300,7 @@ export class CameraController {
   private processFrame() {
     if (!this.videoEl || !this.canvasEl || this.videoEl.readyState < 2) return;
 
-    // 1. Synchronize the onscreen canvas resolution with container dimensions (HiDPI)
+    // Synchronize onscreen canvas resolution with container dimensions (HiDPI)
     const rect = this.canvasEl.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
@@ -246,53 +316,20 @@ export class CameraController {
     const ctx = this.canvasEl.getContext('2d');
     if (!ctx) return;
 
-    // Clear onscreen canvas so natural <video> shines through
     ctx.clearRect(0, 0, targetW, targetH);
 
-    // 2. Offscreen canvas for computer vision processing
-    const offW = 320;
-    const offH = 240;
-    if (this.offscreenCanvas.width !== offW || this.offscreenCanvas.height !== offH) {
-      this.offscreenCanvas.width = offW;
-      this.offscreenCanvas.height = offH;
-      this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
-    }
-    if (!this.offscreenCtx) return;
-
-    // Draw video to offscreen canvas (mirrored for natural webcam preview)
-    this.offscreenCtx.save();
-    this.offscreenCtx.scale(-1, 1);
-    this.offscreenCtx.drawImage(this.videoEl, -offW, 0, offW, offH);
-    this.offscreenCtx.restore();
-
-    // 3. Compute visible portion of the video in the container (matching CSS object-fit: cover)
-    const videoW = this.videoEl.videoWidth || 640;
-    const videoH = this.videoEl.videoHeight || 480;
-    const videoRatio = videoW / videoH;
-    const containerRatio = rect.width / rect.height;
-
-    let visibleRatio = 1.0;
-    let cropOffsetRatio = 0.0;
-
-    if (videoRatio > containerRatio) {
-      visibleRatio = containerRatio / videoRatio;
-      cropOffsetRatio = (1 - visibleRatio) / 2;
-    }
-
-    const visibleOffscreenW = offW * visibleRatio;
-    const startX = offW * cropOffsetRatio;
     const now = performance.now();
 
-    // 4. Branch based on Mode: Fin2Morse tracks HAND ONLY, Blink2Morse tracks EYES ONLY
     if (this.currentMode === 'Fin2Morse') {
       this.processHandFrame(ctx, targetW, targetH, dpr, now);
     } else {
-      this.processEyeFrame(ctx, targetW, targetH, dpr, now, startX, visibleOffscreenW);
+      this.processEyeFrame(ctx, targetW, targetH, dpr, now);
     }
   }
 
   /**
-   * Fin2Morse Hand Tracking: Analyzes video frame for Hand presence and Finger micro-taps.
+   * Fin2Morse Hand Tracking: Uses MediaPipe hand_gesture.task model.
+   * Renders finger bones in WHITE (#FFFFFF) and landmark points in CYAN (#00FFFF).
    * Completely ignores face and eyes.
    */
   private processHandFrame(
@@ -302,51 +339,273 @@ export class CameraController {
     dpr: number,
     now: number
   ) {
-    if (!this.offscreenCtx) return;
+    if (!this.videoEl || this.videoEl.readyState < 2) return;
 
+    let hasHandModelResults = false;
+
+    // 1. Run MediaPipe Gesture Recognizer model if loaded
+    if (this.gestureRecognizer && now > this.lastRecognizeTime + 25) {
+      this.lastRecognizeTime = now;
+      try {
+        const results = this.gestureRecognizer.recognizeForVideo(this.videoEl, now);
+        if (results && results.landmarks && results.landmarks.length > 0) {
+          hasHandModelResults = true;
+          this.isHandDetected = true;
+          this.renderHandGestureResult(ctx, results, targetW, targetH, dpr, now);
+
+          const metrics: CameraMetrics = {
+            fps: this.currentFps,
+            mode: 'Fin2Morse',
+            ear: 0,
+            isBlinking: false,
+            baselineEar: 0,
+            isHandDetected: true,
+            isFingerTapping: this.isHandTapping,
+            handConfidence: Number(this.handConfidence.toFixed(2)),
+            gestureName: this.detectedGestureName,
+          };
+          this.onMetricsCallbacks.forEach((cb) => cb(metrics));
+          return;
+        }
+      } catch (err) {
+        // Fall through to client vision fallback if model frame fails
+      }
+    }
+
+    // 2. Client-side Hand Silhouette & Fingertip Fallback (when model is loading or in low-resource environments)
+    if (!hasHandModelResults) {
+      this.processHandFallback(ctx, targetW, targetH, dpr, now);
+    }
+  }
+
+  /**
+   * Renders Hand Model Results from hand_gesture.task:
+   *  - Đốt ngón tay (skeletal joints/bones): MÀU TRẮNG (#FFFFFF)
+   *  - Điểm từng ngón (landmark points/joints): MÀU CYAN (#00FFFF)
+   */
+  private renderHandGestureResult(
+    ctx: CanvasRenderingContext2D,
+    results: GestureRecognizerResult,
+    targetW: number,
+    targetH: number,
+    dpr: number,
+    now: number
+  ) {
+    ctx.save();
+
+    for (let h = 0; h < results.landmarks.length; h++) {
+      const landmarks = results.landmarks[h];
+      const gestures = results.gestures[h];
+      const topGesture = gestures && gestures.length > 0 ? gestures[0] : null;
+
+      if (topGesture && topGesture.categoryName && topGesture.categoryName !== 'None') {
+        this.detectedGestureName = topGesture.categoryName;
+        this.handConfidence = topGesture.score;
+      } else {
+        this.detectedGestureName = 'Hand Detected';
+        this.handConfidence = 0.95;
+      }
+
+      // 1. RENDER ĐỐT NGÓN TAY MÀU TRẮNG (#FFFFFF)
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = Math.round(3.2 * dpr);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.45)';
+      ctx.shadowBlur = Math.round(6 * dpr);
+
+      for (const [startIdx, endIdx] of HAND_CONNECTIONS) {
+        const p1 = landmarks[startIdx];
+        const p2 = landmarks[endIdx];
+
+        // Mirrored selfie view: x is inverted
+        const x1 = (1 - p1.x) * targetW;
+        const y1 = p1.y * targetH;
+        const x2 = (1 - p2.x) * targetW;
+        const y2 = p2.y * targetH;
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+
+      ctx.shadowBlur = 0;
+
+      // 2. RENDER ĐIỂM TỪNG NGÓN MÀU CYAN (#00FFFF)
+      for (let i = 0; i < landmarks.length; i++) {
+        const p = landmarks[i];
+        const px = (1 - p.x) * targetW;
+        const py = p.y * targetH;
+
+        const isTip = (i === 4 || i === 8 || i === 12 || i === 16 || i === 20);
+        const radius = isTip ? Math.round(6 * dpr) : Math.round(4 * dpr);
+
+        // Vibrant Cyan Joint
+        ctx.fillStyle = '#00FFFF';
+        ctx.beginPath();
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Dark Cyan Rim
+        ctx.strokeStyle = '#0891B2';
+        ctx.lineWidth = Math.round(1.5 * dpr);
+        ctx.beginPath();
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Glowing outer halo for tips
+        if (isTip) {
+          ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
+          ctx.lineWidth = Math.round(1 * dpr);
+          ctx.beginPath();
+          ctx.arc(px, py, radius + Math.round(3.5 * dpr), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      // 3. Pinch & Micro-Tap Detection for Morse Code
+      // Measures distance between Thumb Tip (4) and Index Tip (8)
+      const thumbTip = landmarks[4];
+      const indexTip = landmarks[8];
+      const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+
+      const isPinching = pinchDist < 0.082;
+      const midX = ((1 - thumbTip.x) + (1 - indexTip.x)) / 2 * targetW;
+      const midY = (thumbTip.y + indexTip.y) / 2 * targetH;
+
+      if (isPinching) {
+        if (!this.isHandTapping) {
+          this.isHandTapping = true;
+          this.handTapStartTime = now;
+        }
+
+        const elapsed = now - this.handTapStartTime;
+        const isDash = elapsed >= 380;
+
+        // Visual contact indicator at pinch point
+        ctx.fillStyle = isDash ? '#00FFFF' : '#C9B8FF';
+        ctx.beginPath();
+        ctx.arc(midX, midY, Math.round(12 * dpr), 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = Math.round(2 * dpr);
+        ctx.beginPath();
+        ctx.arc(midX, midY, Math.round(18 * dpr), 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.font = `700 ${Math.round(11 * dpr)}px 'Inter', sans-serif`;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'center';
+        ctx.fillText(isDash ? '— DASH HOLD (>380ms)' : '• DOT TAP (<380ms)', midX, midY - Math.round(24 * dpr));
+        ctx.textAlign = 'left';
+      } else {
+        if (this.isHandTapping) {
+          const duration = Math.round(now - this.handTapStartTime);
+          this.isHandTapping = false;
+
+          if (duration >= 75 && duration <= 1600) {
+            const symbol = duration < 380 ? '.' : '-';
+            this.onFingerTapCallbacks.forEach((cb) =>
+              cb({ symbol, durationMs: duration, timestamp: now })
+            );
+          }
+        }
+      }
+
+      // 4. Gesture Name Chip above Hand
+      const wrist = landmarks[0];
+      const wx = (1 - wrist.x) * targetW;
+      const wy = Math.max(Math.round(25 * dpr), wrist.y * targetH - Math.round(25 * dpr));
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.beginPath();
+      ctx.roundRect(wx - Math.round(60 * dpr), wy - Math.round(16 * dpr), Math.round(120 * dpr), Math.round(22 * dpr), Math.round(6 * dpr));
+      ctx.fill();
+      ctx.strokeStyle = '#00FFFF';
+      ctx.lineWidth = Math.round(1 * dpr);
+      ctx.stroke();
+
+      ctx.font = `600 ${Math.round(10 * dpr)}px 'JetBrains Mono', monospace`;
+      ctx.fillStyle = '#00FFFF';
+      ctx.textAlign = 'center';
+      const label = this.detectedGestureName ? `GESTURE: ${this.detectedGestureName}` : 'HAND: LOCKED';
+      ctx.fillText(label, wx, wy - Math.round(2 * dpr));
+      ctx.textAlign = 'left';
+    }
+
+    // Bottom HUD Status Bar
+    const barW = Math.round(190 * dpr);
+    const barH = Math.round(5 * dpr);
+    const barX = Math.round(20 * dpr);
+    const barY = targetH - Math.round(86 * dpr);
+
+    ctx.font = `600 ${Math.round(10 * dpr)}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = '#00FFFF';
+    ctx.fillText('FIN2MORSE • MODEL: hand_gesture.task', barX, barY - Math.round(6 * dpr));
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, Math.round(2.5 * dpr));
+    ctx.fill();
+
+    ctx.fillStyle = '#00FFFF';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW * 0.95, barH, Math.round(2.5 * dpr));
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  /**
+   * Fast canvas vision fallback when WebAssembly model is still loading
+   * Renders finger bones in WHITE and joints in CYAN
+   */
+  private processHandFallback(
+    ctx: CanvasRenderingContext2D,
+    targetW: number,
+    targetH: number,
+    dpr: number,
+    _now: number
+  ) {
     const offW = 320;
     const offH = 240;
+    if (this.offscreenCanvas.width !== offW || this.offscreenCanvas.height !== offH) {
+      this.offscreenCanvas.width = offW;
+      this.offscreenCanvas.height = offH;
+      this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (!this.offscreenCtx || !this.videoEl) return;
 
-    // Hand Region of Interest: center and lower portion where hands and fingers naturally gesture
-    const roiX = Math.floor(offW * 0.12);
-    const roiY = Math.floor(offH * 0.12);
-    const roiW = Math.floor(offW * 0.76);
-    const roiH = Math.floor(offH * 0.80);
+    this.offscreenCtx.save();
+    this.offscreenCtx.scale(-1, 1);
+    this.offscreenCtx.drawImage(this.videoEl, -offW, 0, offW, offH);
+    this.offscreenCtx.restore();
 
     try {
-      const imageData = this.offscreenCtx.getImageData(roiX, roiY, roiW, roiH);
+      const imageData = this.offscreenCtx.getImageData(0, 0, offW, offH);
       const data = imageData.data;
-
       let skinCount = 0;
-      let minX = roiW, maxX = 0, minY = roiH, maxY = 0;
-      let topY = roiH;
-      let topX = Math.floor(roiW / 2);
-      const step = 2;
+      let topY = offH;
+      let topX = Math.floor(offW / 2);
+      const step = 3;
 
-      for (let y = 0; y < roiH; y += step) {
-        for (let x = 0; x < roiW; x += step) {
-          const idx = (y * roiW + x) * 4;
+      for (let y = Math.floor(offH * 0.15); y < offH; y += step) {
+        for (let x = Math.floor(offW * 0.15); x < Math.floor(offW * 0.85); x += step) {
+          const idx = (y * offW + x) * 4;
           const r = data[idx];
           const g = data[idx + 1];
           const b = data[idx + 2];
 
-          // Lighting-tolerant human skin chrominance test (YCbCr + RGB)
-          const yLum = 0.299 * r + 0.587 * g + 0.114 * b;
-          const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
-          const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
-
           const isSkin =
-            (yLum > 35 && cb >= 77 && cb <= 132 && cr >= 130 && cr <= 175) ||
-            (r > 70 && g > 35 && b > 20 && r > g && r > b && (r - g) > 10);
+            (r > 70 && g > 35 && b > 20 && r > g && r > b && (r - g) > 10) ||
+            (0.299 * r + 0.587 * g + 0.114 * b > 40 &&
+              128 - 0.168736 * r - 0.331264 * g + 0.5 * b >= 77 &&
+              128 + 0.5 * r - 0.418688 * g - 0.081312 * b >= 130);
 
           if (isSkin) {
             skinCount++;
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-
-            // Track highest skin pixel cluster (fingertip)
             if (y < topY) {
               topY = y;
               topX = x;
@@ -355,76 +614,51 @@ export class CameraController {
         }
       }
 
-      const totalSamples = (roiW / step) * (roiH / step);
-      const skinRatio = skinCount / totalSamples;
-
-      // Detection threshold: at least ~220 skin pixels in hand zone
-      if (skinCount >= 220 && maxX > minX && maxY > minY) {
+      if (skinCount > 180) {
         this.isHandDetected = true;
-        this.handConfidence = Math.min(1.0, skinRatio * 4.5);
+        this.handConfidence = 0.85;
 
-        // Map coordinates back to canvas dimensions
-        const boxX = ((roiX + minX) / offW) * targetW;
-        const boxY = ((roiY + minY) / offH) * targetH;
-        const boxW = ((maxX - minX) / offW) * targetW;
-        const boxH = ((maxY - minY) / offH) * targetH;
-        this.handBox = { x: boxX, y: boxY, w: boxW, h: boxH };
+        const tipX = (topX / offW) * targetW;
+        const tipY = (topY / offH) * targetH;
 
-        const tipCanvasX = ((roiX + topX) / offW) * targetW;
-        const tipCanvasY = ((roiY + topY) / offH) * targetH;
-        this.fingertipPoint = { x: tipCanvasX, y: tipCanvasY };
+        ctx.save();
+        // White bone connector to base
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = Math.round(3 * dpr);
+        ctx.beginPath();
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(tipX, tipY + Math.round(60 * dpr));
+        ctx.stroke();
 
-        // Smooth fingertip position
-        if (this.smoothFingertipY === 0) {
-          this.smoothFingertipY = topY;
-          this.handBaselineY = topY;
-        } else {
-          this.smoothFingertipY = 0.65 * this.smoothFingertipY + 0.35 * topY;
-        }
+        // Cyan joint points
+        ctx.fillStyle = '#00FFFF';
+        ctx.strokeStyle = '#0891B2';
+        ctx.lineWidth = Math.round(1.5 * dpr);
+        ctx.beginPath();
+        ctx.arc(tipX, tipY, Math.round(6 * dpr), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
 
-        // Tap tracking: detect downward micro-tap motion of fingertip
-        if (!this.isHandTapping) {
-          this.handBaselineY = 0.96 * this.handBaselineY + 0.04 * this.smoothFingertipY;
-          const downwardDip = this.smoothFingertipY - this.handBaselineY;
+        ctx.beginPath();
+        ctx.arc(tipX, tipY + Math.round(30 * dpr), Math.round(4 * dpr), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
 
-          // Downward motion threshold of fingertip
-          if (downwardDip > 7.5) {
-            this.isHandTapping = true;
-            this.handTapStartTime = now;
-          }
-        } else {
-          const elapsed = now - this.handTapStartTime;
-          const upwardReturn = this.handBaselineY - this.smoothFingertipY;
+        ctx.beginPath();
+        ctx.arc(tipX, tipY + Math.round(60 * dpr), Math.round(4 * dpr), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
 
-          if (elapsed > 1600) {
-            // Auto-recover if held too long
-            this.isHandTapping = false;
-            this.handBaselineY = this.smoothFingertipY;
-          } else if (upwardReturn > -3.5) {
-            // Fingertip released back up
-            this.isHandTapping = false;
-            this.handBaselineY = this.smoothFingertipY;
-            const duration = Math.round(elapsed);
-            if (duration >= 75 && duration <= 1500) {
-              const symbol = duration < 380 ? '.' : '-';
-              this.onFingerTapCallbacks.forEach((cb) =>
-                cb({ symbol, durationMs: duration, timestamp: now })
-              );
-            }
-          }
-        }
-
-        this.drawHandHUD(ctx, targetW, targetH, dpr, now);
+        ctx.font = `600 ${Math.round(10 * dpr)}px 'JetBrains Mono', monospace`;
+        ctx.fillStyle = '#00FFFF';
+        ctx.fillText('FIN2MORSE • HAND DETECTED', tipX - Math.round(40 * dpr), tipY - Math.round(12 * dpr));
+        ctx.restore();
       } else {
         this.isHandDetected = false;
-        this.isHandTapping = false;
         this.handConfidence = 0;
-        this.handBox = null;
-        this.fingertipPoint = null;
         this.drawHandSearchHUD(ctx, targetW, targetH, dpr);
       }
 
-      // Emit metrics
       const metrics: CameraMetrics = {
         fps: this.currentFps,
         mode: 'Fin2Morse',
@@ -434,121 +668,12 @@ export class CameraController {
         isHandDetected: this.isHandDetected,
         isFingerTapping: this.isHandTapping,
         handConfidence: Number(this.handConfidence.toFixed(2)),
+        gestureName: this.detectedGestureName,
       };
       this.onMetricsCallbacks.forEach((cb) => cb(metrics));
     } catch {
       // Ignore canvas read errors
     }
-  }
-
-  /**
-   * Draws hand tracking HUD with fingertip target and tap duration indicator
-   */
-  private drawHandHUD(
-    ctx: CanvasRenderingContext2D,
-    _targetW: number,
-    targetH: number,
-    dpr: number,
-    now: number
-  ) {
-    if (!this.handBox) return;
-    ctx.save();
-
-    const { x, y, w, h } = this.handBox;
-    const isTapping = this.isHandTapping;
-    const elapsed = isTapping ? now - this.handTapStartTime : 0;
-    const isDash = isTapping && elapsed >= 380;
-
-    // Corner brackets color
-    const strokeColor = isTapping ? (isDash ? '#111111' : '#8B5CF6') : '#10B981';
-    const cornerLen = Math.round(20 * dpr);
-    ctx.lineWidth = Math.round(2.5 * dpr);
-    ctx.strokeStyle = strokeColor;
-
-    // Top-left
-    ctx.beginPath();
-    ctx.moveTo(x, y + cornerLen);
-    ctx.lineTo(x, y);
-    ctx.lineTo(x + cornerLen, y);
-    ctx.stroke();
-
-    // Top-right
-    ctx.beginPath();
-    ctx.moveTo(x + w - cornerLen, y);
-    ctx.lineTo(x + w, y);
-    ctx.lineTo(x + w, y + cornerLen);
-    ctx.stroke();
-
-    // Bottom-left
-    ctx.beginPath();
-    ctx.moveTo(x, y + h - cornerLen);
-    ctx.lineTo(x, y + h);
-    ctx.lineTo(x + cornerLen, y + h);
-    ctx.stroke();
-
-    // Bottom-right
-    ctx.beginPath();
-    ctx.moveTo(x + w - cornerLen, y + h);
-    ctx.lineTo(x + w, y + h);
-    ctx.lineTo(x + w, y + h - cornerLen);
-    ctx.stroke();
-
-    // Fingertip tracker circle
-    if (this.fingertipPoint) {
-      const fx = this.fingertipPoint.x;
-      const fy = this.fingertipPoint.y;
-      const radius = isTapping ? Math.round(14 * dpr) : Math.round(9 * dpr);
-
-      ctx.fillStyle = isTapping ? (isDash ? '#111111' : '#C9B8FF') : 'rgba(201, 184, 255, 0.4)';
-      ctx.beginPath();
-      ctx.arc(fx, fy, radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = isTapping ? '#FFFFFF' : '#8B5CF6';
-      ctx.lineWidth = Math.round(2 * dpr);
-      ctx.beginPath();
-      ctx.arc(fx, fy, radius + Math.round(4 * dpr), 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Tap status label above fingertip
-      ctx.font = `600 ${Math.round(11 * dpr)}px 'Inter', sans-serif`;
-      ctx.fillStyle = '#FFFFFF';
-      ctx.textAlign = 'center';
-      if (isTapping) {
-        const tapLabel = isDash ? '— DASH (>380ms)' : '• DOT (<380ms)';
-        ctx.fillText(tapLabel, fx, fy - radius - Math.round(8 * dpr));
-      } else {
-        ctx.fillText('FINGERTIP', fx, fy - radius - Math.round(6 * dpr));
-      }
-      ctx.textAlign = 'left';
-    }
-
-    // Bottom Status Badge on Video Feed
-    const barW = Math.round(160 * dpr);
-    const barH = Math.round(5 * dpr);
-    const barX = Math.round(20 * dpr);
-    const barY = targetH - Math.round(86 * dpr);
-
-    ctx.font = `600 ${Math.round(10 * dpr)}px 'JetBrains Mono', monospace`;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    const statusText = isTapping
-      ? (isDash ? 'FIN: DASH HOLD (—)' : 'FIN: DOT TAP (•)')
-      : 'FIN: HAND LOCKED (READY)';
-    ctx.fillText(statusText, barX, barY - Math.round(5 * dpr));
-
-    // Progress bar
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW, barH, Math.round(2.5 * dpr));
-    ctx.fill();
-
-    const progressPct = isTapping ? Math.min(1.0, elapsed / 380) : this.handConfidence;
-    ctx.fillStyle = isTapping ? (isDash ? '#111111' : '#C9B8FF') : '#10B981';
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW * progressPct, barH, Math.round(2.5 * dpr));
-    ctx.fill();
-
-    ctx.restore();
   }
 
   /**
@@ -567,22 +692,20 @@ export class CameraController {
     const boxX = Math.round((targetW - boxW) / 2);
     const boxY = Math.round(targetH * 0.22);
 
-    // Subtle dashed amber frame
     ctx.setLineDash([Math.round(8 * dpr), Math.round(6 * dpr)]);
     ctx.lineWidth = Math.round(1.5 * dpr);
-    ctx.strokeStyle = 'rgba(245, 158, 11, 0.7)';
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
     ctx.strokeRect(boxX, boxY, boxW, boxH);
     ctx.setLineDash([]);
 
-    // Prompt Text
     ctx.textAlign = 'center';
     ctx.font = `600 ${Math.round(13 * dpr)}px 'Inter', sans-serif`;
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = '#00FFFF';
     ctx.fillText('SHOW HAND TO CAMERA', targetW / 2, boxY + boxH / 2 - Math.round(6 * dpr));
 
     ctx.font = `400 ${Math.round(10 * dpr)}px 'Inter', sans-serif`;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.fillText('Hold up your hand / finger to tap Morse', targetW / 2, boxY + boxH / 2 + Math.round(14 * dpr));
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.fillText('Model: hand_gesture.task (Bones: White | Points: Cyan)', targetW / 2, boxY + boxH / 2 + Math.round(14 * dpr));
 
     ctx.restore();
   }
@@ -595,17 +718,25 @@ export class CameraController {
     targetW: number,
     targetH: number,
     dpr: number,
-    now: number,
-    startX: number,
-    visibleOffscreenW: number
+    now: number
   ) {
-    if (!this.offscreenCtx) return;
+    const offW = 320;
     const offH = 240;
+    if (this.offscreenCanvas.width !== offW || this.offscreenCanvas.height !== offH) {
+      this.offscreenCanvas.width = offW;
+      this.offscreenCanvas.height = offH;
+      this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (!this.offscreenCtx || !this.videoEl) return;
 
-    // Region of Interest (ROI) for eye detection centered on visible face
-    const roiX = Math.floor(startX + visibleOffscreenW * 0.20);
+    this.offscreenCtx.save();
+    this.offscreenCtx.scale(-1, 1);
+    this.offscreenCtx.drawImage(this.videoEl, -offW, 0, offW, offH);
+    this.offscreenCtx.restore();
+
+    const roiX = Math.floor(offW * 0.20);
     const roiY = Math.floor(offH * 0.20);
-    const roiW = Math.floor(visibleOffscreenW * 0.60);
+    const roiW = Math.floor(offW * 0.60);
     const roiH = Math.floor(offH * 0.32);
 
     try {
@@ -732,7 +863,7 @@ export class CameraController {
   }
 
   /**
-   * Draws a clean, minimalist tracking HUD over the eye/face region in Blink2Morse mode
+   * Draws a clean tracking HUD over the eye region in Blink2Morse mode
    */
   private drawEyeHUD(
     ctx: CanvasRenderingContext2D,
@@ -789,7 +920,7 @@ export class CameraController {
     ctx.lineTo(rx + rw, ry + rh - cornerLen);
     ctx.stroke();
 
-    // Center subtle crosshair
+    // Center crosshair
     const cx = rx + rw / 2;
     const cy = ry + rh / 2;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
@@ -817,7 +948,7 @@ export class CameraController {
     ctx.font = `500 ${Math.round(10 * dpr)}px 'JetBrains Mono', monospace`;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
     const statusPrefix = this.backendConnected
-      ? (isFaceDetected ? (isBlinking ? 'AI: CLOSED' : 'AI: OPEN') : 'AI: NO FACE')
+      ? (isFaceDetected ? (isBlinking ? 'HF/AI: CLOSED' : 'HF/AI: OPEN') : 'AI: NO FACE')
       : (isBlinking ? 'LOCAL: BLINK' : 'LOCAL: OPEN');
     ctx.fillText(`${statusPrefix} (${displayScore.toFixed(2)})`, barX, barY - Math.round(5 * dpr));
 
