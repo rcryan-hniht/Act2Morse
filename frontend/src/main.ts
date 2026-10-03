@@ -7,7 +7,7 @@ import {
 } from './morse.ts';
 import { morseAudio } from './audio.ts';
 import { cameraController, type CameraMetrics, type BlinkEvent } from './camera.ts';
-import { wsBridge, type ConnectionStatus, type BackendMessage } from './ws.ts';
+import { wsBridge, type ConnectionStatus, type BackendResponse, type BackendMessage } from './ws.ts';
 
 // State management
 let currentMorseBuffer: string = '';
@@ -94,6 +94,13 @@ function updateDisplay() {
   decodedTextDisplay.textContent = decodedText.length > 0 ? decodedText : '—';
 }
 
+function pulseFloatingIcon() {
+  floatingIcon.style.color = '#8B5CF6';
+  setTimeout(() => {
+    floatingIcon.style.color = '#111111';
+  }, 220);
+}
+
 /**
  * Appends a Morse symbol (. or -) and resets auto-pause timer
  */
@@ -111,10 +118,7 @@ function appendSymbol(symbol: '.' | '-') {
   }
 
   // Visual pulse on floating icon
-  floatingIcon.style.color = '#8B5CF6';
-  setTimeout(() => {
-    floatingIcon.style.color = '#111111';
-  }, 220);
+  pulseFloatingIcon();
 
   updateDisplay();
 
@@ -231,19 +235,101 @@ function flashCameraStatus(label: string) {
  * Camera metrics updates
  */
 cameraController.onMetrics((metrics: CameraMetrics) => {
-  if (isCameraActive) {
+  if (isCameraActive && !wsBridge.isConnected()) {
     camStatusText.textContent = `${metrics.isBlinking ? 'BLINK' : 'TRACKING'} • ${metrics.fps} FPS`;
   }
 });
 
-cameraController.onBlink(handleBlinkEvent);
+// Stream captured frames to AI backend via WebSocket with backpressure
+cameraController.onFrame((canvas: HTMLCanvasElement) => {
+  if (isCameraActive && wsBridge.isConnected()) {
+    wsBridge.sendFrame(canvas);
+  }
+});
+
+// Handle blinks detected by client vision fallback (when backend is offline)
+cameraController.onBlink((event: BlinkEvent) => {
+  if (!wsBridge.isConnected()) {
+    handleBlinkEvent(event);
+  }
+});
 
 /**
  * WebSocket backend listeners
  */
 wsBridge.onStatusChange((status: ConnectionStatus) => {
   if (status === 'connected') {
-    showToast('Connected to Python backend');
+    showToast('🟢 Connected to AI Backend (MediaPipe)');
+    cameraController.setBackendState(true, null, false, false);
+    if (isCameraActive) {
+      camStatusDot.style.background = '#10B981';
+      camStatusText.textContent = 'AI BACKEND READY';
+    }
+  } else {
+    cameraController.setBackendState(false, null, false, false);
+    if (isCameraActive) {
+      camStatusDot.style.background = '#6B7280';
+      camStatusText.textContent = 'LOCAL VISION READY';
+    }
+  }
+});
+
+wsBridge.onResponse((res: BackendResponse) => {
+  cameraController.setBackendState(true, res.score, res.face, res.eyes_closed);
+
+  if (!isCameraActive) return;
+
+  if (!res.face) {
+    camStatusDot.style.background = '#F59E0B';
+    camStatusText.textContent = 'NO FACE DETECTED';
+    floatingBarSub.textContent = 'Position your face in front of the camera';
+    return;
+  }
+
+  if (res.eyes_closed) {
+    camStatusDot.classList.add('blinking');
+    camStatusDot.style.background = '#C9B8FF';
+    camStatusText.textContent = `EYES CLOSED • ${(res.score ?? 0).toFixed(2)}`;
+  } else {
+    camStatusDot.classList.remove('blinking');
+    camStatusDot.style.background = '#10B981';
+    camStatusText.textContent = `AI TRACKING • ${(res.score ?? 0).toFixed(2)}`;
+  }
+
+  // Handle server-side Morse events
+  if (res.events && res.events.length > 0) {
+    for (const evt of res.events) {
+      if (evt === 'dot') {
+        morseAudio.playDot();
+        flashCameraStatus('DOT (•)');
+        floatingBarStatus.textContent = 'Blink: Dot (•)';
+        pulseFloatingIcon();
+      } else if (evt === 'dash') {
+        morseAudio.playDash();
+        flashCameraStatus('DASH (—)');
+        floatingBarStatus.textContent = 'Blink: Dash (—)';
+        pulseFloatingIcon();
+      } else if (evt === 'letter_gap') {
+        morseAudio.playCharacterComplete();
+        flashCameraStatus('LETTER DONE');
+        floatingBarStatus.textContent = 'Letter completed';
+      } else if (evt === 'word_gap') {
+        morseAudio.playWordSpace();
+        flashCameraStatus('WORD SPACE');
+        floatingBarStatus.textContent = 'Word space added';
+      }
+    }
+  }
+
+  // Synchronize current symbols and decoded text from backend session
+  currentMorseBuffer = res.symbols;
+  decodedText = res.text;
+  updateDisplay();
+
+  if (currentMorseBuffer.length > 0) {
+    floatingBarSub.textContent = `Buffer: ${currentMorseBuffer} → Potential: ${decodeMorseSequence(currentMorseBuffer)}`;
+  } else if (decodedText.length > 0) {
+    floatingBarSub.textContent = `Decoded: "${decodedText}"`;
   }
 });
 
@@ -281,6 +367,7 @@ function setupEventListeners() {
     decodedText = '';
     if (letterTimeoutId) clearTimeout(letterTimeoutId);
     if (wordTimeoutId) clearTimeout(wordTimeoutId);
+    wsBridge.sendReset();
     updateDisplay();
     floatingBarStatus.textContent = 'Listening for blinks...';
     floatingBarSub.textContent = 'Short <380ms = Dot (•) | Long >380ms = Dash (—)';

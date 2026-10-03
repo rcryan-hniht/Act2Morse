@@ -22,7 +22,7 @@ export class CameraController {
   private stream: MediaStream | null = null;
   private animFrameId: number | null = null;
 
-  // Offscreen canvas for vision processing (never stretched in DOM)
+  // Offscreen canvas for vision processing (320x240 for fast MediaPipe & local analysis)
   private offscreenCanvas: HTMLCanvasElement = document.createElement('canvas');
   private offscreenCtx: CanvasRenderingContext2D | null = null;
 
@@ -30,15 +30,23 @@ export class CameraController {
   private isBlinkActive: boolean = false;
   private blinkStartTime: number = 0;
 
-  // Adaptive threshold calibration
+  // Adaptive threshold calibration for local vision fallback
   private earHistory: number[] = [];
-  private baselineEar: number = 0.32;
-  private currentEar: number = 0.32;
-  private blinkThresholdRatio: number = 0.72; // Blink triggers when EAR < 72% of baseline
+  private baselineEar: number = 0.30;
+  private currentEar: number = 0.30;
+  private blinkCloseRatio: number = 0.78; // Closes below 78% of baseline
+  private blinkOpenRatio: number = 0.88;  // Reopens above 88% of baseline
 
   private lastFrameTime: number = performance.now();
+  private lastFrameSentTime: number = 0;
   private fpsCounter: number = 0;
   private currentFps: number = 30;
+
+  // Backend synchronization state
+  private backendConnected: boolean = false;
+  private backendScore: number | null = null;
+  private backendFace: boolean = false;
+  private backendEyesClosed: boolean = false;
 
   private onBlinkCallbacks: Array<(event: BlinkEvent) => void> = [];
   private onMetricsCallbacks: Array<(metrics: CameraMetrics) => void> = [];
@@ -65,6 +73,9 @@ export class CameraController {
 
       this.isRunning = true;
       this.lastFrameTime = performance.now();
+      this.earHistory = [];
+      this.baselineEar = 0.30;
+      this.currentEar = 0.30;
       this.loop();
       return true;
     } catch (err) {
@@ -95,6 +106,13 @@ export class CameraController {
 
   public isActive(): boolean {
     return this.isRunning;
+  }
+
+  public setBackendState(connected: boolean, score: number | null, face: boolean, eyesClosed: boolean) {
+    this.backendConnected = connected;
+    this.backendScore = score;
+    this.backendFace = face;
+    this.backendEyesClosed = eyesClosed;
   }
 
   public onBlink(callback: (event: BlinkEvent) => void) {
@@ -130,7 +148,7 @@ export class CameraController {
   };
 
   /**
-   * Computes Eye Aspect Ratio estimation using contrast and vertical gradient in eye zone.
+   * Computes Eye Aspect Ratio estimation and streams frames for AI processing.
    * Keeps video proportions 100% natural and renders crisp retina HUD on top.
    */
   private processFrame() {
@@ -152,7 +170,7 @@ export class CameraController {
     const ctx = this.canvasEl.getContext('2d');
     if (!ctx) return;
 
-    // CLEAR onscreen canvas so hardware-accelerated natural <video> shines through
+    // Clear onscreen canvas so hardware-accelerated natural <video> shines through
     ctx.clearRect(0, 0, targetW, targetH);
 
     // 2. Offscreen canvas for computer vision processing
@@ -165,7 +183,7 @@ export class CameraController {
     }
     if (!this.offscreenCtx) return;
 
-    // Draw video to offscreen canvas (mirrored)
+    // Draw video to offscreen canvas (mirrored for natural webcam preview)
     this.offscreenCtx.save();
     this.offscreenCtx.scale(-1, 1);
     this.offscreenCtx.drawImage(this.videoEl, -offW, 0, offW, offH);
@@ -181,7 +199,6 @@ export class CameraController {
     let cropOffsetRatio = 0.0;
 
     if (videoRatio > containerRatio) {
-      // Video is wider than container: horizontal edges are cropped
       visibleRatio = containerRatio / videoRatio;
       cropOffsetRatio = (1 - visibleRatio) / 2;
     }
@@ -190,22 +207,37 @@ export class CameraController {
     const startX = offW * cropOffsetRatio;
 
     // Region of Interest (ROI) for eye detection centered on visible face
-    const roiX = Math.floor(startX + visibleOffscreenW * 0.24);
-    const roiY = Math.floor(offH * 0.28);
-    const roiW = Math.floor(visibleOffscreenW * 0.52);
-    const roiH = Math.floor(offH * 0.24);
+    const roiX = Math.floor(startX + visibleOffscreenW * 0.22);
+    const roiY = Math.floor(offH * 0.24);
+    const roiW = Math.floor(visibleOffscreenW * 0.56);
+    const roiH = Math.floor(offH * 0.28);
+
+    const now = performance.now();
 
     try {
       const imageData = this.offscreenCtx.getImageData(roiX, roiY, roiW, roiH);
       const data = imageData.data;
 
-      // Calculate vertical edge gradient & contrast in eye ROI
+      // Local vision analysis: measure left eye & right eye zones separately
+      // Left eye band: 12% - 44% of face ROI; Right eye band: 56% - 88% of face ROI
+      const leftX1 = Math.floor(roiW * 0.12);
+      const leftX2 = Math.floor(roiW * 0.44);
+      const rightX1 = Math.floor(roiW * 0.56);
+      const rightX2 = Math.floor(roiW * 0.88);
+      const eyeY1 = Math.floor(roiH * 0.25);
+      const eyeY2 = Math.floor(roiH * 0.80);
+
       let verticalGradientSum = 0;
-      let pixelCount = 0;
+      let totalLum = 0;
+      let eyePixelCount = 0;
       const step = 2;
 
-      for (let y = 0; y < roiH - 2; y += step) {
+      for (let y = eyeY1; y < eyeY2 - 2; y += step) {
         for (let x = 0; x < roiW; x += step) {
+          const inLeftEye = x >= leftX1 && x <= leftX2;
+          const inRightEye = x >= rightX1 && x <= rightX2;
+          if (!inLeftEye && !inRightEye) continue;
+
           const idxCurrent = (y * roiW + x) * 4;
           const idxNext = ((y + 2) * roiW + x) * 4;
 
@@ -213,52 +245,77 @@ export class CameraController {
           const lum2 = 0.299 * data[idxNext] + 0.587 * data[idxNext + 1] + 0.114 * data[idxNext + 2];
 
           verticalGradientSum += Math.abs(lum2 - lum1);
-          pixelCount++;
+          totalLum += lum1;
+          eyePixelCount++;
         }
       }
 
-      const avgGradient = pixelCount > 0 ? verticalGradientSum / pixelCount : 0;
-      const instantEar = Math.max(0.1, Math.min(0.5, avgGradient / 75));
+      const avgLum = eyePixelCount > 0 ? totalLum / eyePixelCount : 128;
 
-      // Moving average for baseline calibration
-      this.earHistory.push(instantEar);
-      if (this.earHistory.length > 60) {
-        this.earHistory.shift();
-      }
+      // Dark pupil / iris contrast count
+      let darkIrisCount = 0;
+      for (let y = eyeY1; y < eyeY2; y += step) {
+        for (let x = 0; x < roiW; x += step) {
+          const inLeftEye = x >= leftX1 && x <= leftX2;
+          const inRightEye = x >= rightX1 && x <= rightX2;
+          if (!inLeftEye && !inRightEye) continue;
 
-      this.currentEar = 0.7 * this.currentEar + 0.3 * instantEar;
-
-      const sortedHistory = [...this.earHistory].sort((a, b) => a - b);
-      if (sortedHistory.length > 15) {
-        this.baselineEar = sortedHistory[Math.floor(sortedHistory.length * 0.75)];
-      }
-
-      const threshold = Math.max(0.18, this.baselineEar * this.blinkThresholdRatio);
-      const now = performance.now();
-
-      // State machine for blink detection
-      if (this.currentEar < threshold) {
-        if (!this.isBlinkActive) {
-          this.isBlinkActive = true;
-          this.blinkStartTime = now;
-        }
-      } else {
-        if (this.isBlinkActive) {
-          this.isBlinkActive = false;
-          const duration = Math.round(now - this.blinkStartTime);
-          if (duration >= 80 && duration <= 1800) {
-            this.onBlinkCallbacks.forEach((cb) => cb({ durationMs: duration, timestamp: now }));
+          const idx = (y * roiW + x) * 4;
+          const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+          if (lum < avgLum * 0.78) {
+            darkIrisCount++;
           }
         }
       }
 
-      // 4. Draw HUD targeting brackets on the crisp onscreen canvas
-      const hudX = Math.floor(targetW * 0.24);
-      const hudY = Math.floor(targetH * 0.28);
-      const hudW = Math.floor(targetW * 0.52);
-      const hudH = Math.floor(targetH * 0.24);
+      const avgGradient = eyePixelCount > 0 ? verticalGradientSum / eyePixelCount : 0;
+      const darkRatio = eyePixelCount > 0 ? darkIrisCount / eyePixelCount : 0;
 
-      this.drawHUD(ctx, hudX, hudY, hudW, hudH, threshold, dpr);
+      // Instantaneous EAR heuristic: combined eye vertical gradient & dark pupil presence
+      const instantEar = Math.max(0.08, Math.min(0.60, (avgGradient / 45) * 0.65 + darkRatio * 1.8));
+
+      // Fast responsiveness with smooth baseline tracking
+      this.currentEar = 0.55 * this.currentEar + 0.45 * instantEar;
+
+      // Update baseline when not blinking
+      if (!this.isBlinkActive) {
+        this.earHistory.push(this.currentEar);
+        if (this.earHistory.length > 50) {
+          this.earHistory.shift();
+        }
+        if (this.earHistory.length > 10) {
+          const sorted = [...this.earHistory].sort((a, b) => a - b);
+          this.baselineEar = sorted[Math.floor(sorted.length * 0.70)];
+        }
+      }
+
+      const closeThreshold = Math.max(0.12, this.baselineEar * this.blinkCloseRatio);
+      const openThreshold = Math.max(0.15, this.baselineEar * this.blinkOpenRatio);
+
+      // Client-side blink state machine (active when backend is offline)
+      if (!this.backendConnected) {
+        if (!this.isBlinkActive && this.currentEar < closeThreshold) {
+          this.isBlinkActive = true;
+          this.blinkStartTime = now;
+        } else if (this.isBlinkActive && this.currentEar > openThreshold) {
+          this.isBlinkActive = false;
+          const duration = Math.round(now - this.blinkStartTime);
+          if (duration >= 130 && duration <= 1600) {
+            this.onBlinkCallbacks.forEach((cb) => cb({ durationMs: duration, timestamp: now }));
+          }
+        }
+      } else {
+        // Backend connected: synchronize isBlinkActive with backend
+        this.isBlinkActive = this.backendEyesClosed;
+      }
+
+      // 4. Draw HUD targeting brackets on the crisp onscreen canvas
+      const hudX = Math.floor(targetW * 0.22);
+      const hudY = Math.floor(targetH * 0.24);
+      const hudW = Math.floor(targetW * 0.56);
+      const hudH = Math.floor(targetH * 0.28);
+
+      this.drawHUD(ctx, hudX, hudY, hudW, hudH, closeThreshold, dpr);
 
       // Emit metrics
       const metrics: CameraMetrics = {
@@ -269,8 +326,11 @@ export class CameraController {
       };
       this.onMetricsCallbacks.forEach((cb) => cb(metrics));
 
-      // Emit canvas frame for WebSocket streaming if needed
-      this.onFrameCallbacks.forEach((cb) => cb(this.offscreenCanvas));
+      // 5. Emit canvas frame for WebSocket streaming (~22 FPS throttle to match CPU inference)
+      if (now - this.lastFrameSentTime >= 45) {
+        this.lastFrameSentTime = now;
+        this.onFrameCallbacks.forEach((cb) => cb(this.offscreenCanvas));
+      }
     } catch {
       // Ignore canvas access errors if any
     }
@@ -290,10 +350,22 @@ export class CameraController {
   ) {
     ctx.save();
 
-    // Eye ROI Box with subtle elegant corners
+    const isBlinking = this.backendConnected ? this.backendEyesClosed : this.isBlinkActive;
+    const isFaceDetected = this.backendConnected ? this.backendFace : true;
+
+    // Corner bracket colors
+    let strokeColor = 'rgba(255, 255, 255, 0.45)';
+    if (this.backendConnected && !isFaceDetected) {
+      strokeColor = '#F59E0B'; // Amber: searching face
+    } else if (isBlinking) {
+      strokeColor = '#C9B8FF'; // Accent: eyes closed
+    } else if (this.backendConnected) {
+      strokeColor = '#10B981'; // Green: locked with MediaPipe AI
+    }
+
     const cornerLen = Math.round(18 * dpr);
     ctx.lineWidth = Math.round(2 * dpr);
-    ctx.strokeStyle = this.isBlinkActive ? '#C9B8FF' : 'rgba(255, 255, 255, 0.45)';
+    ctx.strokeStyle = strokeColor;
 
     // Top-left
     ctx.beginPath();
@@ -337,15 +409,25 @@ export class CameraController {
     ctx.stroke();
 
     // EAR Indicator Bar positioned cleanly above the floating bar
-    const barW = Math.round(130 * dpr);
+    const barW = Math.round(140 * dpr);
     const barH = Math.round(5 * dpr);
     const barX = Math.round(20 * dpr);
     const barY = ctx.canvas.height - Math.round(86 * dpr);
 
+    // Score computation
+    const displayScore = this.backendConnected
+      ? (this.backendScore ?? 0)
+      : this.currentEar;
+    const displayThreshold = this.backendConnected ? 0.60 : threshold;
+    const maxVal = this.backendConnected ? 1.0 : 0.45;
+
     // Label above EAR bar
     ctx.font = `500 ${Math.round(10 * dpr)}px 'JetBrains Mono', monospace`;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.fillText(`EAR: ${this.currentEar.toFixed(2)}`, barX, barY - Math.round(5 * dpr));
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    const statusPrefix = this.backendConnected
+      ? (isFaceDetected ? (isBlinking ? 'AI: CLOSED' : 'AI: OPEN') : 'AI: NO FACE')
+      : (isBlinking ? 'LOCAL: BLINK' : 'LOCAL: OPEN');
+    ctx.fillText(`${statusPrefix} (${displayScore.toFixed(2)})`, barX, barY - Math.round(5 * dpr));
 
     // Background track
     ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
@@ -354,14 +436,14 @@ export class CameraController {
     ctx.fill();
 
     // Progress
-    const earPct = Math.min(1, Math.max(0, this.currentEar / 0.45));
-    ctx.fillStyle = this.isBlinkActive ? '#C9B8FF' : '#FFFFFF';
+    const earPct = Math.min(1, Math.max(0, displayScore / maxVal));
+    ctx.fillStyle = isBlinking ? '#C9B8FF' : '#FFFFFF';
     ctx.beginPath();
     ctx.roundRect(barX, barY, barW * earPct, barH, Math.round(2.5 * dpr));
     ctx.fill();
 
     // Threshold indicator line
-    const threshX = barX + barW * Math.min(1, threshold / 0.45);
+    const threshX = barX + barW * Math.min(1, displayThreshold / maxVal);
     ctx.strokeStyle = '#EF4444';
     ctx.lineWidth = Math.round(2 * dpr);
     ctx.beginPath();
