@@ -456,7 +456,11 @@ export class CameraController {
       try {
         const results = this.gestureRecognizer.recognizeForVideo(this.videoEl, now);
         this.latestHandResults = results;
-        this.lastHandResultTime = now;
+        // Only refresh lastHandResultTime when landmarks are actually detected
+        // so the 220ms stale guard triggers correctly when hand leaves frame
+        if (results && results.landmarks && results.landmarks.length > 0) {
+          this.lastHandResultTime = now;
+        }
       } catch (err) {
         // Model frame error handling
       } finally {
@@ -466,7 +470,8 @@ export class CameraController {
 
     // 3. Render latest hand tracking results at rock-solid 60 FPS on every animation frame
     const results = this.latestHandResults;
-    const isRecent = results && (now - this.lastHandResultTime < 220);
+    // isRecent: only apply stale-guard once lastHandResultTime has been set by first inference
+    const isRecent = results !== null && (this.lastHandResultTime === 0 || (now - this.lastHandResultTime < 220));
     const hasHand = isRecent && results && results.landmarks && results.landmarks.length > 0;
 
     if (hasHand && results) {
