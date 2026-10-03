@@ -9,6 +9,7 @@ reply before sending the next frame).
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import time
 
@@ -90,22 +91,46 @@ async def ws(websocket: WebSocket) -> None:
             if (data := message.get("bytes")) is not None:
                 reply = await _handle_frame(detector, session, data)
             elif (text_msg := message.get("text")) is not None:
-                # Only reset is expected; anything else is ignored but still
-                # answered once so the client's backpressure doesn't stall.
                 try:
                     parsed = json.loads(text_msg)
                 except (json.JSONDecodeError, TypeError):
                     parsed = None
+
                 if isinstance(parsed, dict) and parsed.get("type") == "reset":
                     session.reset()
-                reply = {
-                    "face": False,
-                    "score": None,
-                    "eyes_closed": False,
-                    "events": [],
-                    "symbols": session.symbols,
-                    "text": session.text,
-                }
+                    reply = {
+                        "face": False,
+                        "score": None,
+                        "eyes_closed": False,
+                        "events": [],
+                        "symbols": session.symbols,
+                        "text": session.text,
+                    }
+                elif isinstance(parsed, dict) and parsed.get("type") == "frame" and isinstance(parsed.get("image"), str):
+                    img_str = parsed["image"]
+                    if "," in img_str:
+                        img_str = img_str.split(",", 1)[1]
+                    try:
+                        frame_bytes = base64.b64decode(img_str)
+                        reply = await _handle_frame(detector, session, frame_bytes)
+                    except Exception:
+                        reply = {
+                            "face": False,
+                            "score": None,
+                            "eyes_closed": False,
+                            "events": [],
+                            "symbols": session.symbols,
+                            "text": session.text,
+                        }
+                else:
+                    reply = {
+                        "face": False,
+                        "score": None,
+                        "eyes_closed": False,
+                        "events": [],
+                        "symbols": session.symbols,
+                        "text": session.text,
+                    }
             else:
                 continue  # Empty message: nothing to answer.
 

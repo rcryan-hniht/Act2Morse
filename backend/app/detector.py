@@ -72,7 +72,8 @@ class EyeDetector:
 
         # VIDEO mode requires strictly increasing timestamps, in microseconds.
         self._timestamp_us += 33_333  # ~30 fps; order, not realism, matters.
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
         result = self._landmarker.detect_for_video(mp_image, self._timestamp_us)
         if not result.face_blendshapes:
             return None
