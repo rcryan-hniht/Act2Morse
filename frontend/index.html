@@ -199,8 +199,8 @@ async function processWebcamStream(stream: MediaStream) {
             />
 
             <!-- Live Webcam Video Feed & Canvas HUD Overlay -->
-            <video class="webcam-video" id="webcamVideo" playsinline muted></video>
-            <canvas class="webcam-canvas" id="webcamCanvas" width="640" height="480"></canvas>
+            <video class="webcam-video" id="webcamVideo" playsinline muted autoplay></video>
+            <canvas class="webcam-canvas" id="webcamCanvas"></canvas>
 
             <!-- Top Camera Status Bar & Switch Button -->
             <div class="camera-top-controls">

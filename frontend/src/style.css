@@ -553,8 +553,8 @@ body {
 
 .portrait-container {
   width: 100%;
-  aspect-ratio: 3 / 4;
-  max-height: 550px;
+  aspect-ratio: 4 / 5;
+  max-height: 560px;
   background-color: #0A0A0A;
   border-radius: var(--radius-hero);
   overflow: hidden;
@@ -572,16 +572,20 @@ body {
   transition: opacity 0.3s ease;
 }
 
-/* Live Webcam Video & Canvas */
+/* Live Webcam Video & Canvas - 100% natural aspect ratio with center-crop */
 .webcam-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   position: absolute;
   top: 0;
   left: 0;
   transform: scaleX(-1);
+  -webkit-transform: scaleX(-1);
   display: none;
+  z-index: 2;
+  background-color: #0A0A0A;
 }
 
 .webcam-canvas {
@@ -592,6 +596,7 @@ body {
   left: 0;
   pointer-events: none;
   display: none;
+  z-index: 5;
 }
 
 /* Camera Overlay Status Pill & Controls */
