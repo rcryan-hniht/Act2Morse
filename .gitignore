@@ -1,0 +1,31 @@
+# Node
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+build/
+*.egg-info/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# MediaPipe model
+backend/models/
+.pytest_cache/
+
+# Agent docs (local only)
+AGENTS.md
+
