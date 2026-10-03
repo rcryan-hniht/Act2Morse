@@ -1,5 +1,5 @@
 /**
- * WebSocket client for connecting to the Blink2Morse Python backend.
+ * WebSocket client for connecting to the Act2Morse Python backend.
  * Provides binary frame streaming with backpressure control and handles
  * real-time MediaPipe eye-blink detection & Morse decoding events.
  */
@@ -34,7 +34,9 @@ function resolveDefaultWsUrl(): string {
   if (typeof envUrl === 'string' && envUrl.trim().length > 0) {
     return envUrl.trim();
   }
-  return 'ws://localhost:8000/ws';
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.hostname || 'localhost';
+  return `${protocol}//${host}:8000/ws`;
 }
 
 export class BlinkWebSocketBridge {
@@ -137,6 +139,14 @@ export class BlinkWebSocketBridge {
 
   public sendReset() {
     this.send({ type: 'reset' });
+  }
+
+  public sendSymbol(symbol: '.' | '-') {
+    this.send({ type: 'symbol', symbol });
+  }
+
+  public sendSpace() {
+    this.send({ type: 'space' });
   }
 
   /**

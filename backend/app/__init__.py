@@ -1,1 +1,1 @@
-"""Blink2Morse backend application package."""
+"""Act2Morse backend application package."""

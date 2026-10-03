@@ -28,18 +28,19 @@ const btnSimClear = document.getElementById('btnSimClear') as HTMLButtonElement;
 const btnTransmit = document.getElementById('btnTransmit') as HTMLButtonElement;
 const btnSoundToggle = document.getElementById('btnSoundToggle') as HTMLButtonElement;
 
-const tabDecoder = document.getElementById('tabDecoder') as HTMLButtonElement;
-const tabAuth = document.getElementById('tabAuth') as HTMLButtonElement;
-const viewDecoder = document.getElementById('viewDecoder') as HTMLDivElement;
-const viewAuth = document.getElementById('viewAuth') as HTMLDivElement;
 
-const btnGoogleAuth = document.getElementById('btnGoogleAuth') as HTMLButtonElement;
-const btnEmailAuth = document.getElementById('btnEmailAuth') as HTMLButtonElement;
+// Navbar DOM
+const navBtnAction = document.getElementById('navBtnAction') as HTMLButtonElement | null;
+const btnModeBlink = document.getElementById('btnModeBlink') as HTMLButtonElement | null;
+const btnModeFinger = document.getElementById('btnModeFinger') as HTMLButtonElement | null;
+const navLinkChart = document.getElementById('navLinkChart') as HTMLAnchorElement | null;
+
+let currentMode: 'Blink2Morse' | 'Fin2Morse' = 'Blink2Morse';
+let fingerTapStartTime = 0;
 
 // Camera DOM
 const btnToggleCamera = document.getElementById('btnToggleCamera') as HTMLButtonElement;
 const btnToggleCamText = document.getElementById('btnToggleCamText') as HTMLSpanElement;
-const navBtnAction = document.getElementById('navBtnAction') as HTMLButtonElement;
 const webcamVideo = document.getElementById('webcamVideo') as HTMLVideoElement;
 const webcamCanvas = document.getElementById('webcamCanvas') as HTMLCanvasElement;
 const heroPortraitImg = document.getElementById('heroPortraitImg') as HTMLImageElement;
@@ -51,11 +52,9 @@ const floatingBarStatus = document.getElementById('floatingBarStatus') as HTMLSp
 const floatingBarSub = document.getElementById('floatingBarSub') as HTMLSpanElement;
 const floatingIcon = document.getElementById('floatingIcon') as HTMLDivElement;
 
-// Modal DOM
-const alphabetModal = document.getElementById('alphabetModal') as HTMLDivElement;
-const modalCloseBtn = document.getElementById('modalCloseBtn') as HTMLButtonElement;
+// Morse Chart DOM
 const btnOpenAlphabet = document.getElementById('btnOpenAlphabet') as HTMLButtonElement;
-const navLinkAlphabet = document.getElementById('navLinkAlphabet') as HTMLAnchorElement;
+const morseChartPanel = document.getElementById('morseChartPanel') as HTMLDivElement;
 const morseChartGrid = document.getElementById('morseChartGrid') as HTMLDivElement;
 
 // Toast DOM
@@ -105,6 +104,19 @@ function pulseFloatingIcon() {
  * Appends a Morse symbol (. or -) and resets auto-pause timer
  */
 function appendSymbol(symbol: '.' | '-') {
+  if (wsBridge.isConnected()) {
+    wsBridge.sendSymbol(symbol);
+    if (symbol === '.') {
+      morseAudio.playDot();
+      floatingBarStatus.textContent = `Blink: Dot (•)`;
+    } else {
+      morseAudio.playDash();
+      floatingBarStatus.textContent = `Blink: Dash (—)`;
+    }
+    pulseFloatingIcon();
+    return;
+  }
+
   currentMorseBuffer += symbol;
 
   if (symbol === '.') {
@@ -180,12 +192,13 @@ async function toggleCamera() {
       webcamCanvas.style.display = 'block';
 
       btnToggleCamText.textContent = 'Stop Camera';
-      navBtnAction.textContent = 'Stop Camera';
+      if (navBtnAction) navBtnAction.textContent = 'Stop Camera';
       camStatusDot.style.background = '#10B981';
       camStatusText.textContent = 'LIVE TRACKING';
       showToast('Live eye camera activated');
     } else {
       btnToggleCamText.textContent = 'Launch Camera';
+      if (navBtnAction) navBtnAction.textContent = 'Start Camera';
       showToast('Camera permission denied or camera unavailable');
     }
   } else {
@@ -196,7 +209,7 @@ async function toggleCamera() {
     heroPortraitImg.style.display = 'block';
 
     btnToggleCamText.textContent = 'Launch Camera';
-    navBtnAction.textContent = 'Start Camera';
+    if (navBtnAction) navBtnAction.textContent = 'Start Camera';
     camStatusDot.style.background = '#6B7280';
     camStatusText.textContent = 'WEBCAM OFF';
     showToast('Camera stopped');
@@ -269,7 +282,7 @@ wsBridge.onStatusChange((status: ConnectionStatus) => {
     cameraController.setBackendState(false, null, false, false);
     if (isCameraActive) {
       camStatusDot.style.background = '#6B7280';
-      camStatusText.textContent = 'LOCAL VISION READY';
+      camStatusText.textContent = 'LOCAL VISION (AI Offline)';
     }
   }
 });
@@ -279,14 +292,12 @@ wsBridge.onResponse((res: BackendResponse) => {
 
   if (!isCameraActive) return;
 
+  // Visual status indicators
   if (!res.face) {
     camStatusDot.style.background = '#F59E0B';
-    camStatusText.textContent = 'NO FACE DETECTED';
+    camStatusText.textContent = 'LOOK AT CAMERA (NO FACE)';
     floatingBarSub.textContent = 'Position your face in front of the camera';
-    return;
-  }
-
-  if (res.eyes_closed) {
+  } else if (res.eyes_closed) {
     camStatusDot.classList.add('blinking');
     camStatusDot.style.background = '#C9B8FF';
     camStatusText.textContent = `EYES CLOSED • ${(res.score ?? 0).toFixed(2)}`;
@@ -296,7 +307,7 @@ wsBridge.onResponse((res: BackendResponse) => {
     camStatusText.textContent = `AI TRACKING • ${(res.score ?? 0).toFixed(2)}`;
   }
 
-  // Handle server-side Morse events
+  // Handle server-side Morse events (DO NOT RETURN EARLY ON !res.face)
   if (res.events && res.events.length > 0) {
     for (const evt of res.events) {
       if (evt === 'dot') {
@@ -353,6 +364,12 @@ function setupEventListeners() {
   btnSimDash.addEventListener('click', () => appendSymbol('-'));
   
   btnSimSpace.addEventListener('click', () => {
+    if (wsBridge.isConnected()) {
+      wsBridge.sendSpace();
+      morseAudio.playWordSpace();
+      showToast('Word space added');
+      return;
+    }
     finalizeCharacter();
     if (decodedText.length > 0 && !decodedText.endsWith(' ')) {
       decodedText += ' ';
@@ -396,67 +413,77 @@ function setupEventListeners() {
 
   // Camera toggle buttons
   btnToggleCamera.addEventListener('click', toggleCamera);
-  navBtnAction.addEventListener('click', toggleCamera);
+  if (navBtnAction) {
+    navBtnAction.addEventListener('click', toggleCamera);
+  }
 
-  // Tab switching: Live Morse Console vs Auth
-  tabDecoder.addEventListener('click', () => {
-    tabDecoder.classList.add('active');
-    tabAuth.classList.remove('active');
-    viewDecoder.style.display = 'flex';
-    viewAuth.style.display = 'none';
+  // Mode Switcher: Blink2Morse vs Fin2Morse
+  btnModeBlink?.addEventListener('click', () => {
+    currentMode = 'Blink2Morse';
+    btnModeBlink.classList.add('active');
+    btnModeFinger?.classList.remove('active');
+    floatingBarStatus.textContent = 'Blink2Morse Active';
+    floatingBarSub.textContent = 'Tracking eye movements (Short=Dot, Long=Dash)';
+    showToast('👁️ Switched to Blink2Morse (Eye Tracking Mode)');
   });
 
-  tabAuth.addEventListener('click', () => {
-    tabAuth.classList.add('active');
-    tabDecoder.classList.remove('active');
-    viewDecoder.style.display = 'none';
-    viewAuth.style.display = 'flex';
+  btnModeFinger?.addEventListener('click', () => {
+    currentMode = 'Fin2Morse';
+    btnModeFinger?.classList.add('active');
+    btnModeBlink?.classList.remove('active');
+    floatingBarStatus.textContent = 'Fin2Morse Active (Finger Tap)';
+    floatingBarSub.textContent = 'Tap Spacebar or screen (Hold <380ms = • Dot, Hold >380ms = — Dash)';
+    showToast('🖐️ Switched to Fin2Morse (Finger / Tactile Mode)');
   });
 
-  // Nav Login button toggles to Auth tab
-  document.getElementById('navBtnLogin')?.addEventListener('click', () => {
-    tabAuth.click();
-    showToast('Switched to Sign In mode');
-  });
-
-  // Auth Button Actions
-  btnGoogleAuth.addEventListener('click', () => {
-    showToast('Google authentication initialized');
-  });
-
-  btnEmailAuth.addEventListener('click', () => {
-    showToast('Email sign-in initialized');
-  });
-
-  // Alphabet modal
-  const openAlphabetModal = () => {
-    alphabetModal.classList.add('open');
-  };
-  const closeAlphabetModal = () => {
-    alphabetModal.classList.remove('open');
-  };
-
-  btnOpenAlphabet.addEventListener('click', openAlphabetModal);
-  navLinkAlphabet.addEventListener('click', (e) => {
+  navLinkChart?.addEventListener('click', (e) => {
     e.preventDefault();
-    openAlphabetModal();
-  });
-  modalCloseBtn.addEventListener('click', closeAlphabetModal);
-  alphabetModal.addEventListener('click', (e) => {
-    if (e.target === alphabetModal) closeAlphabetModal();
+    morseChartPanel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    morseChartPanel?.classList.add('pulse-highlight');
+    setTimeout(() => morseChartPanel?.classList.remove('pulse-highlight'), 600);
+    showToast('Morse Chart beside camera');
   });
 
-  // Keyboard accessibility shortcuts
+  // Morse Chart highlight / focus
+  btnOpenAlphabet.addEventListener('click', () => {
+    morseChartPanel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    morseChartPanel?.classList.add('pulse-highlight');
+    setTimeout(() => morseChartPanel?.classList.remove('pulse-highlight'), 600);
+    showToast('Morse Chart is beside the camera');
+  });
+
+  // Keyboard accessibility and Fin2Morse tactile input
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && alphabetModal.classList.contains('open')) {
-      closeAlphabetModal();
-    } else if (e.code === 'KeyD' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
+    if (e.code === 'KeyD' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
       appendSymbol('.');
     } else if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
       appendSymbol('-');
     } else if (e.code === 'Space' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
       e.preventDefault();
-      finalizeCharacter();
+      if (currentMode === 'Fin2Morse') {
+        if (!e.repeat && fingerTapStartTime === 0) {
+          fingerTapStartTime = performance.now();
+          floatingBarStatus.textContent = 'Fin2Morse: Pressing...';
+          pulseFloatingIcon();
+        }
+      } else {
+        finalizeCharacter();
+      }
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space' && currentMode === 'Fin2Morse' && fingerTapStartTime > 0) {
+      e.preventDefault();
+      const duration = performance.now() - fingerTapStartTime;
+      fingerTapStartTime = 0;
+      if (duration < 380) {
+        appendSymbol('.');
+        flashCameraStatus('DOT (•)');
+      } else {
+        appendSymbol('-');
+        flashCameraStatus('DASH (—)');
+      }
     }
   });
 }

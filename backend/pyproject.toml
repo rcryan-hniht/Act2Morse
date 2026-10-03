@@ -1,7 +1,7 @@
 [project]
-name = "blink2morse-backend"
+name = "act2morse-backend"
 version = "0.1.0"
-description = "Eye blink to Morse code backend: MediaPipe blink detection and Morse decoding over WebSocket."
+description = "Act2Morse: Assistive eye blink and finger action to Morse code backend service"
 readme = "../README.md"
 requires-python = ">=3.11"
 dependencies = [

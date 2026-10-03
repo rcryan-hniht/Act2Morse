@@ -1,5 +1,5 @@
 /**
- * Morse Code Dictionary and Translation Engine for Blink2Morse
+ * Morse Code Dictionary and Translation Engine for Act2Morse
  */
 
 export const MORSE_TABLE: Record<string, string> = {

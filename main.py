@@ -1,5 +1,5 @@
 def main():
-    print("Hello from blink2morse!")
+    print("Hello from act2morse!")
 
 
 if __name__ == "__main__":

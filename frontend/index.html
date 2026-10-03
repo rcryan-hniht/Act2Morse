@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23C9B8FF'><path d='M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z'/></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Blink2Morse — Live Eye Blink Morse Code Decoder</title>
+    <title>Act2Morse — Assistive Eye Blink & Finger Morse Communication</title>
+    <meta name="description" content="Act2Morse: An assistive technology converting natural eye blinks (Blink2Morse) and finger micro-taps (Fin2Morse) into real-time Morse code communication for speech, hearing, and motor-impaired individuals." />
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
@@ -13,13 +14,14 @@
       <!-- Watermark background code layer -->
       <div class="code-watermark" aria-hidden="true">
 /**
- * Blink2Morse Core Engine
- * Computer vision pipeline tracking eye blinks to Morse stream
+ * Act2Morse Core Assistive Engine
+ * Tracking eye blinks (Blink2Morse) & finger taps (Fin2Morse) to Morse stream
+ * Designed for non-verbal, deaf-mute and motor-disabled individuals
  */
-interface BlinkProfile {
+interface ActProfile {
   readonly dotThresholdMs: 380;
   readonly dashThresholdMs: 1200;
-  readonly eyeAspectRatio: number;
+  readonly mode: 'Blink2Morse' | 'Fin2Morse';
 }
 
 const MORSE_MAP: Record<string, string> = {
@@ -30,82 +32,66 @@ const MORSE_MAP: Record<string, string> = {
   U: "..-",  V: "...-", W: ".--",  X: "-..-", Y: "-.--",
   Z: "--..", SOS: "... --- ..."
 };
-
-async function processWebcamStream(stream: MediaStream) {
-  const ear = calculateEyeAspectRatio(landmarks);
-  if (ear &lt; EAR_THRESHOLD && !isClosed) {
-    blinkStart = performance.now();
-    isClosed = true;
-  } else if (ear >= EAR_THRESHOLD && isClosed) {
-    const duration = performance.now() - blinkStart;
-    const symbol = duration &lt; 380 ? "." : "-";
-    dispatchMorseEvent(symbol);
-    isClosed = false;
-  }
-}
       </div>
 
       <!-- Header with Floating Black Pill Navigation Bar -->
       <header class="header-container">
         <nav class="nav-pill" aria-label="Main Navigation">
-          <!-- Left: Logo -->
+          <!-- Left: Brand Logo -->
           <a href="#" class="nav-brand">
             <div class="brand-icon">
-              <!-- Eye / Morse Icon -->
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
                 <circle cx="12" cy="12" r="3" fill="#C9B8FF" />
               </svg>
             </div>
-            <span class="brand-name">Blink2Morse</span>
-            <span class="brand-badge">LIVE</span>
+            <span class="brand-name">Act2Morse</span>
+            <span class="brand-badge">ASSISTIVE AI</span>
           </a>
 
-          <!-- Center: Menu (sans, 13px) -->
-          <ul class="nav-menu">
-            <li><a href="#overview" class="nav-link active">Overview</a></li>
-            <li><a href="#decoder" class="nav-link" id="navLinkDecoder">Live Decoder</a></li>
-            <li><a href="#alphabet" class="nav-link" id="navLinkAlphabet">Morse Chart</a></li>
-            <li><a href="#docs" class="nav-link" id="navLinkDocs">Docs</a></li>
-          </ul>
+          <!-- Center: Mode Selector (Blink2Morse vs Fin2Morse) & Links -->
+          <div class="nav-modes">
+            <button class="nav-mode-btn active" id="btnModeBlink" type="button" title="Eye Blink Tracking">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+              <span>Blink2Morse</span>
+            </button>
+            <button class="nav-mode-btn" id="btnModeFinger" type="button" title="Finger Tap & Gesture Morse">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+              <span>Fin2Morse</span>
+              <span class="mode-tag-new">TAP</span>
+            </button>
+            <a href="#morseChartPanel" class="nav-link-chart" id="navLinkChart">Morse Chart</a>
+          </div>
 
-          <!-- Right: Login and Action Buttons -->
+          <!-- Right: Camera Action Button -->
           <div class="nav-actions">
-            <button class="nav-btn-ghost" id="navBtnLogin" type="button">Log in</button>
             <button class="nav-btn-accent" id="navBtnAction" type="button">Start Camera</button>
           </div>
         </nav>
       </header>
 
-      <!-- Hero Section (Two Columns) -->
+      <!-- Hero Section -->
       <section class="hero-section">
         <!-- Left Column: Title, Description & Action/Login Card -->
         <div class="hero-left">
           <div class="hero-pill-tag">
             <span class="pulse-dot"></span>
-            Computer Vision • Real-Time Morse
+            Assistive Technology • For Speech & Hearing Impairments
           </div>
 
           <!-- Hero Headline (Editorial serif, 56px, centered) -->
           <h1 class="hero-title">
-            Convert eye blinks into <em>living words.</em>
+            Convert micro actions into <em>living words.</em>
           </h1>
 
           <!-- Hero Subtitle (Mono or sans, 14px, wide line-height, centered) -->
           <p class="hero-subtitle">
-            A computer vision interface tracking micro eye movements via live webcam.
-            Translates blink duration into Morse dots and dashes for hands-free, real-time voice and text communication.
+            An accessible communication interface transforming eye blinks (<strong>Blink2Morse</strong>) and finger micro-taps (<strong>Fin2Morse</strong>) into live Morse code and natural speech. Designed to empower deaf-mute, non-verbal, and motor-impaired individuals.
           </p>
 
-          <!-- Card: Background #EDEDED with Google and Email buttons & Morse Console -->
+          <!-- Card: Morse Console -->
           <div class="login-card" id="cardContainer">
-            <!-- Card View Tabs -->
-            <div class="card-tabs">
-              <button class="card-tab-btn active" id="tabDecoder" type="button">Live Morse Console</button>
-              <button class="card-tab-btn" id="tabAuth" type="button">Sign In / Account</button>
-            </div>
-
-            <!-- Tab 1: Live Morse Console -->
+            <!-- Live Morse Console -->
             <div class="morse-console-panel" id="viewDecoder">
               <div class="console-header">
                 <span class="console-label">Morse Buffer & Translation</span>
@@ -156,33 +142,9 @@ async function processWebcamStream(stream: MediaStream) {
               </div>
             </div>
 
-            <!-- Tab 2: Authentication (Google & Email buttons per Serus specification) -->
-            <div class="auth-buttons-group" id="viewAuth" style="display: none;">
-              <!-- Continue with Google (Black #111111) -->
-              <button class="btn-primary-dark" id="btnGoogleAuth" type="button">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
-                </svg>
-                Continue with Google
-              </button>
-
-              <!-- Continue with Email (White #FFFFFF with #E5E5E5 border) -->
-              <button class="btn-secondary-white" id="btnEmailAuth" type="button">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect width="20" height="16" x="2" y="4" rx="2" />
-                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-                </svg>
-                Continue with Email
-              </button>
-            </div>
-
-            <!-- Legal note (11px-12px gray) -->
+            <!-- Privacy note -->
             <p class="legal-note">
-              By proceeding, you agree to our <a href="#">Terms of Service</a> & <a href="#">Privacy Policy</a>.
-              Webcam video is processed strictly on-device in your browser.
+              Webcam video is processed in real time for eye blink detection. No video is recorded or stored.
             </p>
           </div>
         </div>
@@ -241,27 +203,31 @@ async function processWebcamStream(stream: MediaStream) {
               </button>
             </div>
           </div>
+
+          <!-- Morse Code Reference Chart (styled identically to the navigation bar) -->
+          <div class="morse-chart-panel" id="morseChartPanel">
+            <div class="morse-chart-header">
+              <div class="morse-chart-brand">
+                <div class="morse-chart-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                    <circle cx="12" cy="12" r="3" fill="#C9B8FF" />
+                  </svg>
+                </div>
+                <span class="morse-chart-title">Morse Chart</span>
+              </div>
+              <span class="morse-chart-badge">A–Z • 0–9</span>
+            </div>
+            <div class="morse-chart-hint">Tap any symbol to listen & practice</div>
+            <div class="morse-chart-grid" id="morseChartGrid">
+              <!-- Populated dynamically by main.ts -->
+            </div>
+          </div>
         </div>
       </section>
 
 
     </main>
-
-    <!-- Morse Code Reference Sheet Modal -->
-    <div class="modal-backdrop" id="alphabetModal">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 class="modal-title">International Morse Code Chart</h3>
-          <button class="modal-close" id="modalCloseBtn" aria-label="Close modal">&times;</button>
-        </div>
-        <p style="font-size: 13px; color: #6B7280; margin-bottom: 18px; line-height: 1.6;">
-          Tap any letter to test its audio beep and Morse representation. Short blink = Dot (•), Long blink = Dash (—).
-        </p>
-        <div class="modal-grid" id="morseChartGrid">
-          <!-- Populated dynamically by main.ts -->
-        </div>
-      </div>
-    </div>
 
     <!-- Toast Notification -->
     <div class="toast-notice" id="toastNotice">

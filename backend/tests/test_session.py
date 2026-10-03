@@ -90,12 +90,12 @@ class TestConfigDefaults:
         saved = {n: os.environ.pop(n, None) for n in env_names}
         try:
             s = load_settings()
-            assert s.close_threshold == 0.6
-            assert s.open_threshold == 0.4
-            assert s.min_blink_ms == 200
-            assert s.dot_max_ms == 500
-            assert s.letter_gap_ms == 1500
-            assert s.word_gap_ms == 3000
+            assert s.close_threshold == 0.5
+            assert s.open_threshold == 0.25
+            assert s.min_blink_ms == 80
+            assert s.dot_max_ms == 600
+            assert s.letter_gap_ms == 1200
+            assert s.word_gap_ms == 2500
             assert s.allowed_origins == ("http://localhost:5173",)
             assert s.model_path.endswith("models/face_landmarker.task")
         finally:
@@ -106,8 +106,8 @@ class TestConfigDefaults:
     def test_env_overrides(self, monkeypatch: pytest.MonkeyPatch):
         from app.config import load_settings
 
-        monkeypatch.setenv("DOT_MAX_MS", "600")
+        monkeypatch.setenv("DOT_MAX_MS", "750")
         monkeypatch.setenv("ALLOWED_ORIGINS", "https://a.example, https://b.example")
         s = load_settings()
-        assert s.dot_max_ms == 600
+        assert s.dot_max_ms == 750
         assert s.allowed_origins == ("https://a.example", "https://b.example")

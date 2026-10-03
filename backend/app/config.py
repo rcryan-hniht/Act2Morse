@@ -1,4 +1,4 @@
-"""Settings for the Blink2Morse backend.
+"""Settings for the Act2Morse backend.
 
 Every threshold and timing can be overridden with an environment variable so
 the decoding can be tuned per user and lighting conditions without touching
@@ -51,10 +51,10 @@ def load_settings() -> Settings:
             "MODEL_PATH", os.path.join(_BACKEND_DIR, "models", "face_landmarker.task")
         ),
         allowed_origins=tuple(o.strip() for o in origins_raw.split(",") if o.strip()),
-        close_threshold=_env_float("CLOSE_THRESHOLD", 0.6),
-        open_threshold=_env_float("OPEN_THRESHOLD", 0.4),
-        min_blink_ms=_env_int("MIN_BLINK_MS", 200),
-        dot_max_ms=_env_int("DOT_MAX_MS", 500),
-        letter_gap_ms=_env_int("LETTER_GAP_MS", 1500),
-        word_gap_ms=_env_int("WORD_GAP_MS", 3000),
+        close_threshold=_env_float("CLOSE_THRESHOLD", 0.5),   # was 0.6; lighter blinks reach ~0.5
+        open_threshold=_env_float("OPEN_THRESHOLD", 0.25),    # was 0.4; ensures clean reopen signal
+        min_blink_ms=_env_int("MIN_BLINK_MS", 80),            # was 200; 22fps = 45ms/frame, 80ms = ~2 frames
+        dot_max_ms=_env_int("DOT_MAX_MS", 600),               # was 500; more room for dot at low fps
+        letter_gap_ms=_env_int("LETTER_GAP_MS", 1200),        # was 1500
+        word_gap_ms=_env_int("WORD_GAP_MS", 2500),            # was 3000
     )

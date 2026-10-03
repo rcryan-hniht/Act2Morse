@@ -26,6 +26,10 @@ export class CameraController {
   private offscreenCanvas: HTMLCanvasElement = document.createElement('canvas');
   private offscreenCtx: CanvasRenderingContext2D | null = null;
 
+  // Dedicated transmission canvas for unmirrored, aspect-preserving WebSocket streaming
+  private txCanvas: HTMLCanvasElement = document.createElement('canvas');
+  private txCtx: CanvasRenderingContext2D | null = null;
+
   private isRunning: boolean = false;
   private isBlinkActive: boolean = false;
   private blinkStartTime: number = 0;
@@ -34,8 +38,8 @@ export class CameraController {
   private earHistory: number[] = [];
   private baselineEar: number = 0.30;
   private currentEar: number = 0.30;
-  private blinkCloseRatio: number = 0.78; // Closes below 78% of baseline
-  private blinkOpenRatio: number = 0.88;  // Reopens above 88% of baseline
+  private blinkCloseRatio: number = 0.76;
+  private blinkOpenRatio: number = 0.88;
 
   private lastFrameTime: number = performance.now();
   private lastFrameSentTime: number = 0;
@@ -76,6 +80,7 @@ export class CameraController {
       this.earHistory = [];
       this.baselineEar = 0.30;
       this.currentEar = 0.30;
+      this.isBlinkActive = false;
       this.loop();
       return true;
     } catch (err) {
@@ -148,6 +153,31 @@ export class CameraController {
   };
 
   /**
+   * Prepares an unmirrored, aspect-preserving canvas frame for AI transmission
+   */
+  private prepareTransmissionCanvas(): HTMLCanvasElement | null {
+    if (!this.videoEl || this.videoEl.readyState < 2) return null;
+    const vw = this.videoEl.videoWidth || 640;
+    const vh = this.videoEl.videoHeight || 480;
+
+    // Scale to max width 640 while strictly preserving original aspect ratio
+    const scale = Math.min(1, 640 / vw);
+    const tw = Math.round(vw * scale);
+    const th = Math.round(vh * scale);
+
+    if (this.txCanvas.width !== tw || this.txCanvas.height !== th) {
+      this.txCanvas.width = tw;
+      this.txCanvas.height = th;
+      this.txCtx = this.txCanvas.getContext('2d');
+    }
+    if (!this.txCtx) return null;
+
+    // Draw unmirrored natural video frame for MediaPipe Face Landmarker
+    this.txCtx.drawImage(this.videoEl, 0, 0, tw, th);
+    return this.txCanvas;
+  }
+
+  /**
    * Computes Eye Aspect Ratio estimation and streams frames for AI processing.
    * Keeps video proportions 100% natural and renders crisp retina HUD on top.
    */
@@ -207,10 +237,10 @@ export class CameraController {
     const startX = offW * cropOffsetRatio;
 
     // Region of Interest (ROI) for eye detection centered on visible face
-    const roiX = Math.floor(startX + visibleOffscreenW * 0.22);
-    const roiY = Math.floor(offH * 0.24);
-    const roiW = Math.floor(visibleOffscreenW * 0.56);
-    const roiH = Math.floor(offH * 0.28);
+    const roiX = Math.floor(startX + visibleOffscreenW * 0.20);
+    const roiY = Math.floor(offH * 0.20);
+    const roiW = Math.floor(visibleOffscreenW * 0.60);
+    const roiH = Math.floor(offH * 0.32);
 
     const now = performance.now();
 
@@ -219,13 +249,13 @@ export class CameraController {
       const data = imageData.data;
 
       // Local vision analysis: measure left eye & right eye zones separately
-      // Left eye band: 12% - 44% of face ROI; Right eye band: 56% - 88% of face ROI
-      const leftX1 = Math.floor(roiW * 0.12);
-      const leftX2 = Math.floor(roiW * 0.44);
-      const rightX1 = Math.floor(roiW * 0.56);
-      const rightX2 = Math.floor(roiW * 0.88);
-      const eyeY1 = Math.floor(roiH * 0.25);
-      const eyeY2 = Math.floor(roiH * 0.80);
+      // Left eye band: 10% - 45% of face ROI; Right eye band: 55% - 90% of face ROI
+      const leftX1 = Math.floor(roiW * 0.10);
+      const leftX2 = Math.floor(roiW * 0.45);
+      const rightX1 = Math.floor(roiW * 0.55);
+      const rightX2 = Math.floor(roiW * 0.90);
+      const eyeY1 = Math.floor(roiH * 0.20);
+      const eyeY2 = Math.floor(roiH * 0.85);
 
       let verticalGradientSum = 0;
       let totalLum = 0;
@@ -262,7 +292,7 @@ export class CameraController {
 
           const idx = (y * roiW + x) * 4;
           const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-          if (lum < avgLum * 0.78) {
+          if (lum < avgLum * 0.75) {
             darkIrisCount++;
           }
         }
@@ -272,36 +302,43 @@ export class CameraController {
       const darkRatio = eyePixelCount > 0 ? darkIrisCount / eyePixelCount : 0;
 
       // Instantaneous EAR heuristic: combined eye vertical gradient & dark pupil presence
-      const instantEar = Math.max(0.08, Math.min(0.60, (avgGradient / 45) * 0.65 + darkRatio * 1.8));
+      const instantEar = Math.max(0.08, Math.min(0.60, (avgGradient / 35) * 0.60 + darkRatio * 1.6));
 
       // Fast responsiveness with smooth baseline tracking
-      this.currentEar = 0.55 * this.currentEar + 0.45 * instantEar;
+      this.currentEar = 0.50 * this.currentEar + 0.50 * instantEar;
 
       // Update baseline when not blinking
       if (!this.isBlinkActive) {
         this.earHistory.push(this.currentEar);
-        if (this.earHistory.length > 50) {
+        if (this.earHistory.length > 45) {
           this.earHistory.shift();
         }
-        if (this.earHistory.length > 10) {
+        if (this.earHistory.length > 8) {
           const sorted = [...this.earHistory].sort((a, b) => a - b);
-          this.baselineEar = sorted[Math.floor(sorted.length * 0.70)];
+          this.baselineEar = sorted[Math.floor(sorted.length * 0.75)];
         }
       }
 
-      const closeThreshold = Math.max(0.12, this.baselineEar * this.blinkCloseRatio);
-      const openThreshold = Math.max(0.15, this.baselineEar * this.blinkOpenRatio);
+      const closeThreshold = Math.max(0.10, this.baselineEar * this.blinkCloseRatio);
+      const openThreshold = Math.max(0.12, this.baselineEar * this.blinkOpenRatio);
 
       // Client-side blink state machine (active when backend is offline)
       if (!this.backendConnected) {
         if (!this.isBlinkActive && this.currentEar < closeThreshold) {
           this.isBlinkActive = true;
           this.blinkStartTime = now;
-        } else if (this.isBlinkActive && this.currentEar > openThreshold) {
-          this.isBlinkActive = false;
-          const duration = Math.round(now - this.blinkStartTime);
-          if (duration >= 130 && duration <= 1600) {
-            this.onBlinkCallbacks.forEach((cb) => cb({ durationMs: duration, timestamp: now }));
+        } else if (this.isBlinkActive) {
+          const elapsed = now - this.blinkStartTime;
+          // Stuck protection: if closed for > 1500ms, auto-recover
+          if (elapsed > 1500) {
+            this.isBlinkActive = false;
+            this.earHistory = [];
+          } else if (this.currentEar > openThreshold) {
+            this.isBlinkActive = false;
+            const duration = Math.round(elapsed);
+            if (duration >= 80 && duration <= 1400) {
+              this.onBlinkCallbacks.forEach((cb) => cb({ durationMs: duration, timestamp: now }));
+            }
           }
         }
       } else {
@@ -310,10 +347,10 @@ export class CameraController {
       }
 
       // 4. Draw HUD targeting brackets on the crisp onscreen canvas
-      const hudX = Math.floor(targetW * 0.22);
-      const hudY = Math.floor(targetH * 0.24);
-      const hudW = Math.floor(targetW * 0.56);
-      const hudH = Math.floor(targetH * 0.28);
+      const hudX = Math.floor(targetW * 0.20);
+      const hudY = Math.floor(targetH * 0.20);
+      const hudW = Math.floor(targetW * 0.60);
+      const hudH = Math.floor(targetH * 0.32);
 
       this.drawHUD(ctx, hudX, hudY, hudW, hudH, closeThreshold, dpr);
 
@@ -326,10 +363,13 @@ export class CameraController {
       };
       this.onMetricsCallbacks.forEach((cb) => cb(metrics));
 
-      // 5. Emit canvas frame for WebSocket streaming (~22 FPS throttle to match CPU inference)
-      if (now - this.lastFrameSentTime >= 45) {
+      // 5. Emit unmirrored, aspect-preserving canvas frame for WebSocket streaming (~25 FPS throttle)
+      if (now - this.lastFrameSentTime >= 40) {
         this.lastFrameSentTime = now;
-        this.onFrameCallbacks.forEach((cb) => cb(this.offscreenCanvas));
+        const tx = this.prepareTransmissionCanvas();
+        if (tx) {
+          this.onFrameCallbacks.forEach((cb) => cb(tx));
+        }
       }
     } catch {
       // Ignore canvas access errors if any

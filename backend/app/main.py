@@ -33,7 +33,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="Blink2Morse backend", lifespan=lifespan)
+app = FastAPI(title="Act2Morse backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -103,6 +103,35 @@ async def ws(websocket: WebSocket) -> None:
                         "score": None,
                         "eyes_closed": False,
                         "events": [],
+                        "symbols": session.symbols,
+                        "text": session.text,
+                    }
+                elif isinstance(parsed, dict) and parsed.get("type") == "symbol":
+                    sym = parsed.get("symbol")
+                    events: list[str] = []
+                    if sym in (".", "-"):
+                        if sym == ".":
+                            session.decoder.add_symbol(".")
+                            events.append("dot")
+                        else:
+                            session.decoder.add_symbol("-")
+                            events.append("dash")
+                    reply = {
+                        "face": True,
+                        "score": None,
+                        "eyes_closed": False,
+                        "events": events,
+                        "symbols": session.symbols,
+                        "text": session.text,
+                    }
+                elif isinstance(parsed, dict) and parsed.get("type") == "space":
+                    session.decoder.finish_letter()
+                    session.decoder.add_word_gap()
+                    reply = {
+                        "face": True,
+                        "score": None,
+                        "eyes_closed": False,
+                        "events": ["letter_gap", "word_gap"],
                         "symbols": session.symbols,
                         "text": session.text,
                     }
