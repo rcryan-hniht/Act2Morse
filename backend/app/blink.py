@@ -67,6 +67,15 @@ class BlinkTracker:
 
         if score is not None:
             if self._eyes != _EYES_CLOSED and score >= self.close_threshold:
+                # Check if the idle open gap before this closure already exceeded letter/word gap
+                if self._last_symbol_end_ms is not None:
+                    open_gap_ms = now_ms - self._last_symbol_end_ms
+                    if not self._letter_gap_sent and open_gap_ms >= self.letter_gap_ms:
+                        self._letter_gap_sent = True
+                        events.append(LETTER_GAP)
+                    if not self._word_gap_sent and open_gap_ms >= self.word_gap_ms:
+                        self._word_gap_sent = True
+                        events.append(WORD_GAP)
                 # Crossing into a definite closure (or a first definitely-closed frame).
                 self._eyes = _EYES_CLOSED
                 self._closure_start_ms = now_ms
@@ -75,9 +84,10 @@ class BlinkTracker:
                 self._eyes = _EYES_OPEN
                 events.extend(self._end_closure(now_ms))
 
-        # Gap logic runs from the last symbol's end regardless of eye state,
-        # so holding the eyes closed (or no face) still finalises letters.
-        if self._last_symbol_end_ms is not None:
+        # Gap logic only advances while eyes are open (or when face is absent/lost).
+        # Crucially: while eyes are actively closed (holding for a dash), gap timers are paused
+        # so multi-dash or multi-hold characters do not prematurely finalize.
+        if self._eyes != _EYES_CLOSED and self._last_symbol_end_ms is not None:
             gap_ms = now_ms - self._last_symbol_end_ms
             if not self._letter_gap_sent and gap_ms >= self.letter_gap_ms:
                 self._letter_gap_sent = True

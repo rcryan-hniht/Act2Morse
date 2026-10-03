@@ -341,6 +341,37 @@ cameraController.onFrame((canvas: HTMLCanvasElement) => {
   }
 });
 
+// Handle camera finger pinch state (holding vs releasing) in Fin2Morse mode
+cameraController.onPinchState((isPinching: boolean, elapsedMs: number) => {
+  if (currentMode !== 'Fin2Morse') return;
+
+  if (isPinching) {
+    cancelPendingFinalizeTimers();
+    const dashThreshold = DEFAULT_THRESHOLDS.shortDotMaxMs;
+    const isDash = elapsedMs >= dashThreshold;
+
+    finTapZone?.classList.add('is-pressing');
+    if (isDash) {
+      finTapZone?.classList.add('is-dash-ready');
+      if (finTapBadge) finTapBadge.textContent = '— DASH READY (Release to register)';
+      floatingBarStatus.textContent = 'Fin: Dash Ready (—) • Release to register';
+    } else {
+      finTapZone?.classList.remove('is-dash-ready');
+      if (finTapBadge) finTapBadge.textContent = `HOLD FOR DASH: ${Math.round(elapsedMs)}ms / ${dashThreshold}ms`;
+      floatingBarStatus.textContent = `Fin: Holding (${Math.round(elapsedMs)}ms)...`;
+    }
+
+    if (finHoldProgress) {
+      const pct = Math.min(100, (elapsedMs / dashThreshold) * 100);
+      finHoldProgress.style.width = `${pct}%`;
+      finHoldProgress.style.background = isDash ? '#8B5CF6' : '#00F0FF';
+    }
+  } else {
+    stopHoldAnimation();
+    finTapZone?.classList.remove('is-pressing', 'is-dash-ready');
+  }
+});
+
 // Handle camera finger taps in Fin2Morse mode
 cameraController.onFingerTap((event: FingerTapEvent) => {
   if (currentMode === 'Fin2Morse') {
@@ -415,15 +446,19 @@ wsBridge.onResponse((res: BackendResponse) => {
   if (res.events && res.events.length > 0) {
     for (const evt of res.events) {
       if (evt === 'dot') {
-        morseAudio.playDot();
-        flashCameraStatus(currentMode === 'Fin2Morse' ? 'FINGER DOT (•)' : 'DOT (•)');
-        floatingBarStatus.textContent = currentMode === 'Fin2Morse' ? 'Fin: Dot (•)' : 'Blink: Dot (•)';
-        pulseFloatingIcon();
+        if (currentMode === 'Blink2Morse') {
+          morseAudio.playDot();
+          flashCameraStatus('DOT (•)');
+          floatingBarStatus.textContent = 'Blink: Dot (•)';
+          pulseFloatingIcon();
+        }
       } else if (evt === 'dash') {
-        morseAudio.playDash();
-        flashCameraStatus(currentMode === 'Fin2Morse' ? 'FINGER DASH (—)' : 'DASH (—)');
-        floatingBarStatus.textContent = currentMode === 'Fin2Morse' ? 'Fin: Dash (—)' : 'Blink: Dash (—)';
-        pulseFloatingIcon();
+        if (currentMode === 'Blink2Morse') {
+          morseAudio.playDash();
+          flashCameraStatus('DASH (—)');
+          floatingBarStatus.textContent = 'Blink: Dash (—)';
+          pulseFloatingIcon();
+        }
       } else if (evt === 'letter_gap') {
         morseAudio.playCharacterComplete();
         flashCameraStatus('LETTER DONE');

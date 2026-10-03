@@ -75,10 +75,10 @@ export interface BlinkThresholds {
 export const DEFAULT_THRESHOLDS: BlinkThresholds = {
   minNoiseMs: 100,
   shortDotMaxMs: 380,
-  longDashMaxMs: 1400,
-  letterPauseMs: 1000,
-  finLetterPauseMs: 1600,
-  wordPauseMs: 2800,
+  longDashMaxMs: 2200,
+  letterPauseMs: 2200,
+  finLetterPauseMs: 2400,
+  wordPauseMs: 5000,
 };
 
 export type BlinkSymbol = '.' | '-' | 'noise' | 'invalid';

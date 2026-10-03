@@ -98,11 +98,18 @@ class TestGaps:
         assert tracker.update(0.1, 1800) == []
 
     def test_gaps_fire_while_eyes_closed(self, tracker: BlinkTracker):
-        # Letter gap must fire even if the user keeps blinking into the next
-        # letter, or a symbol would never be finalised while eyes keep closing.
+        # Letter gap fires if the preceding open gap exceeded letter_gap_ms before closure started
         tracker.update(0.9, 0)
         tracker.update(0.1, 200)   # dot at 200
-        assert LETTER_GAP in tracker.update(0.9, 1500)  # closed, 1300ms after dot
+        assert LETTER_GAP in tracker.update(0.9, 1500)  # closed, 1300ms open after dot
+
+    def test_holding_dash_does_not_fire_letter_gap(self, tracker: BlinkTracker):
+        # Holding eyes closed for a dash must NOT trigger letter gap even if total time > letter_gap_ms
+        tracker.update(0.9, 0)
+        tracker.update(0.1, 200)   # dot at 200
+        tracker.update(0.9, 600)   # starts closing at 600 (open gap only 400ms)
+        assert tracker.update(0.9, 1500) == []  # still holding at 1500 (900ms hold), NO letter gap
+        assert tracker.update(0.1, 1600) == [DASH]  # reopen at 1600: produces DASH!
 
     def test_no_gaps_before_any_symbol(self, tracker: BlinkTracker):
         assert tracker.update(0.1, 0) == []

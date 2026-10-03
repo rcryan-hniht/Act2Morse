@@ -93,9 +93,9 @@ class TestConfigDefaults:
             assert s.close_threshold == 0.5
             assert s.open_threshold == 0.25
             assert s.min_blink_ms == 80
-            assert s.dot_max_ms == 600
-            assert s.letter_gap_ms == 1200
-            assert s.word_gap_ms == 2500
+            assert s.dot_max_ms == 380
+            assert s.letter_gap_ms == 2200
+            assert s.word_gap_ms == 5000
             assert s.allowed_origins == ("http://localhost:5173",)
             assert s.model_path.endswith("models/face_landmarker.task")
         finally:

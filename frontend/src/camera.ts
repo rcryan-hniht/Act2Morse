@@ -103,6 +103,7 @@ export class CameraController {
 
   private onBlinkCallbacks: Array<(event: BlinkEvent) => void> = [];
   private onFingerTapCallbacks: Array<(event: FingerTapEvent) => void> = [];
+  private onPinchStateCallbacks: Array<(isPinching: boolean, elapsedMs: number) => void> = [];
   private onMetricsCallbacks: Array<(metrics: CameraMetrics) => void> = [];
   private onFrameCallbacks: Array<(canvas: HTMLCanvasElement) => void> = [];
 
@@ -229,6 +230,10 @@ export class CameraController {
     return this.currentMode;
   }
 
+  public isHandVisible(): boolean {
+    return this.isHandDetected;
+  }
+
   public setBackendState(connected: boolean, score: number | null, face: boolean, eyesClosed: boolean) {
     this.backendConnected = connected;
     this.backendScore = score;
@@ -242,6 +247,10 @@ export class CameraController {
 
   public onFingerTap(callback: (event: FingerTapEvent) => void) {
     this.onFingerTapCallbacks.push(callback);
+  }
+
+  public onPinchState(callback: (isPinching: boolean, elapsedMs: number) => void) {
+    this.onPinchStateCallbacks.push(callback);
   }
 
   public onMetrics(callback: (metrics: CameraMetrics) => void) {
@@ -365,16 +374,52 @@ export class CameraController {
             gestureName: this.detectedGestureName,
           };
           this.onMetricsCallbacks.forEach((cb) => cb(metrics));
-          return;
         }
       } catch (err) {
-        // Fall through to client vision fallback if model frame fails
+        // Model frame error handling
       }
     }
 
-    // 2. Client-side Hand Silhouette & Fingertip Fallback (when model is loading or in low-resource environments)
+    // 2. When NO hand is detected: NEVER render skeleton, clear tracking state cleanly
     if (!hasHandModelResults) {
-      this.processHandFallback(ctx, targetW, targetH, dpr, now);
+      this.isHandDetected = false;
+      this.handConfidence = 0;
+      this.detectedGestureName = '';
+
+      if (this.isHandTapping) {
+        const duration = Math.round(now - this.handTapStartTime);
+        this.isHandTapping = false;
+        this.onPinchStateCallbacks.forEach((cb) => cb(false, duration));
+
+        if (duration >= 75 && duration <= 2200) {
+          const symbol = duration < 380 ? '.' : '-';
+          this.onFingerTapCallbacks.forEach((cb) =>
+            cb({ symbol, durationMs: duration, timestamp: now })
+          );
+        }
+      }
+
+      const metrics: CameraMetrics = {
+        fps: this.currentFps,
+        mode: 'Fin2Morse',
+        ear: 0,
+        isBlinking: false,
+        baselineEar: 0,
+        isHandDetected: false,
+        isFingerTapping: false,
+        handConfidence: 0,
+        gestureName: '',
+      };
+      this.onMetricsCallbacks.forEach((cb) => cb(metrics));
+    }
+
+    // 3. Stream frames to WebSocket backend in Fin2Morse mode as well (every 50ms = 20fps)
+    if (now - this.lastFrameSentTime >= 50) {
+      this.lastFrameSentTime = now;
+      const tx = this.prepareTransmissionCanvas();
+      if (tx) {
+        this.onFrameCallbacks.forEach((cb) => cb(tx));
+      }
     }
   }
 
@@ -510,6 +555,7 @@ export class CameraController {
 
         const elapsed = now - this.handTapStartTime;
         const isDash = elapsed >= 380;
+        this.onPinchStateCallbacks.forEach((cb) => cb(true, elapsed));
 
         // Visual contact indicator at pinch point
         ctx.fillStyle = isDash ? '#00FFFF' : '#C9B8FF';
@@ -532,8 +578,9 @@ export class CameraController {
         if (this.isHandTapping) {
           const duration = Math.round(now - this.handTapStartTime);
           this.isHandTapping = false;
+          this.onPinchStateCallbacks.forEach((cb) => cb(false, duration));
 
-          if (duration >= 75 && duration <= 1600) {
+          if (duration >= 75 && duration <= 2200) {
             const symbol = duration < 380 ? '.' : '-';
             this.onFingerTapCallbacks.forEach((cb) =>
               cb({ symbol, durationMs: duration, timestamp: now })
@@ -587,158 +634,7 @@ export class CameraController {
     ctx.restore();
   }
 
-  /**
-   * Fast canvas vision fallback when WebAssembly model is still loading
-   * Renders finger bones in WHITE and joints in CYAN
-   */
-  private processHandFallback(
-    ctx: CanvasRenderingContext2D,
-    targetW: number,
-    targetH: number,
-    dpr: number,
-    _now: number
-  ) {
-    const offW = 320;
-    const offH = 240;
-    if (this.offscreenCanvas.width !== offW || this.offscreenCanvas.height !== offH) {
-      this.offscreenCanvas.width = offW;
-      this.offscreenCanvas.height = offH;
-      this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
-    }
-    if (!this.offscreenCtx || !this.videoEl) return;
 
-    this.offscreenCtx.save();
-    this.offscreenCtx.scale(-1, 1);
-    this.offscreenCtx.drawImage(this.videoEl, -offW, 0, offW, offH);
-    this.offscreenCtx.restore();
-
-    try {
-      const imageData = this.offscreenCtx.getImageData(0, 0, offW, offH);
-      const data = imageData.data;
-      let skinCount = 0;
-      let topY = offH;
-      let topX = Math.floor(offW / 2);
-      const step = 3;
-
-      for (let y = Math.floor(offH * 0.15); y < offH; y += step) {
-        for (let x = Math.floor(offW * 0.15); x < Math.floor(offW * 0.85); x += step) {
-          const idx = (y * offW + x) * 4;
-          const r = data[idx];
-          const g = data[idx + 1];
-          const b = data[idx + 2];
-
-          const isSkin =
-            (r > 70 && g > 35 && b > 20 && r > g && r > b && (r - g) > 10) ||
-            (0.299 * r + 0.587 * g + 0.114 * b > 40 &&
-              128 - 0.168736 * r - 0.331264 * g + 0.5 * b >= 77 &&
-              128 + 0.5 * r - 0.418688 * g - 0.081312 * b >= 130);
-
-          if (isSkin) {
-            skinCount++;
-            if (y < topY) {
-              topY = y;
-              topX = x;
-            }
-          }
-        }
-      }
-
-      if (skinCount > 180) {
-        this.isHandDetected = true;
-        this.handConfidence = 0.85;
-
-        const pFallback = this.videoToCanvasCoord(topX / offW, topY / offH, targetW, targetH);
-        const tipX = pFallback.x;
-        const tipY = pFallback.y;
-
-        ctx.save();
-        // White bone connector to base
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = Math.round(3 * dpr);
-        ctx.beginPath();
-        ctx.moveTo(tipX, tipY);
-        ctx.lineTo(tipX, tipY + Math.round(60 * dpr));
-        ctx.stroke();
-
-        // Cyan joint points
-        ctx.fillStyle = '#00FFFF';
-        ctx.strokeStyle = '#0891B2';
-        ctx.lineWidth = Math.round(1.5 * dpr);
-        ctx.beginPath();
-        ctx.arc(tipX, tipY, Math.round(6 * dpr), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(tipX, tipY + Math.round(30 * dpr), Math.round(4 * dpr), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(tipX, tipY + Math.round(60 * dpr), Math.round(4 * dpr), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.font = `600 ${Math.round(10 * dpr)}px 'JetBrains Mono', monospace`;
-        ctx.fillStyle = '#00FFFF';
-        ctx.fillText('FIN2MORSE • HAND DETECTED', tipX - Math.round(40 * dpr), tipY - Math.round(12 * dpr));
-        ctx.restore();
-      } else {
-        this.isHandDetected = false;
-        this.handConfidence = 0;
-        this.drawHandSearchHUD(ctx, targetW, targetH, dpr);
-      }
-
-      const metrics: CameraMetrics = {
-        fps: this.currentFps,
-        mode: 'Fin2Morse',
-        ear: 0,
-        isBlinking: false,
-        baselineEar: 0,
-        isHandDetected: this.isHandDetected,
-        isFingerTapping: this.isHandTapping,
-        handConfidence: Number(this.handConfidence.toFixed(2)),
-        gestureName: this.detectedGestureName,
-      };
-      this.onMetricsCallbacks.forEach((cb) => cb(metrics));
-    } catch {
-      // Ignore canvas read errors
-    }
-  }
-
-  /**
-   * Draws guiding HUD prompt when hand is not yet detected in frame
-   */
-  private drawHandSearchHUD(
-    ctx: CanvasRenderingContext2D,
-    targetW: number,
-    targetH: number,
-    dpr: number
-  ) {
-    ctx.save();
-
-    const boxW = Math.round(targetW * 0.65);
-    const boxH = Math.round(targetH * 0.55);
-    const boxX = Math.round((targetW - boxW) / 2);
-    const boxY = Math.round(targetH * 0.22);
-
-    ctx.setLineDash([Math.round(8 * dpr), Math.round(6 * dpr)]);
-    ctx.lineWidth = Math.round(1.5 * dpr);
-    ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
-    ctx.strokeRect(boxX, boxY, boxW, boxH);
-    ctx.setLineDash([]);
-
-    ctx.textAlign = 'center';
-    ctx.font = `600 ${Math.round(13 * dpr)}px 'Inter', sans-serif`;
-    ctx.fillStyle = '#00FFFF';
-    ctx.fillText('SHOW HAND TO CAMERA', targetW / 2, boxY + boxH / 2 - Math.round(6 * dpr));
-
-    ctx.font = `400 ${Math.round(10 * dpr)}px 'Inter', sans-serif`;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.fillText('Model: opencv/handpose_estimation_mediapipe (Bones: White | Points: Cyan)', targetW / 2, boxY + boxH / 2 + Math.round(14 * dpr));
-
-    ctx.restore();
-  }
 
   /**
    * Blink2Morse Eye Tracking: Measures Eye Aspect Ratio and detects eye blinks.

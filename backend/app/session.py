@@ -28,6 +28,7 @@ class MorseSession:
     letter_gap_ms: int
     word_gap_ms: int
     mode: str = "Blink2Morse"
+    last_symbol_time_ms: int = 0
 
     def __post_init__(self) -> None:
         self.tracker = BlinkTracker(
@@ -47,6 +48,16 @@ class MorseSession:
             self.mode = "Fin2Morse"
         else:
             self.mode = "Blink2Morse"
+
+    def add_symbol_debounced(self, symbol: str, now_ms: int) -> bool:
+        """Add a symbol with debouncing window to prevent double registration."""
+        if symbol not in (".", "-"):
+            return False
+        if now_ms - self.last_symbol_time_ms < 280:
+            return False
+        self.decoder.add_symbol(symbol)
+        self.last_symbol_time_ms = now_ms
+        return True
 
     def process(self, score: float | None, now_ms: int) -> list[str]:
         """Process one frame; returns events triggered by this frame.
@@ -87,3 +98,4 @@ class MorseSession:
         """Clear current symbols and decoded text."""
         self.tracker.reset()
         self.decoder.reset()
+        self.last_symbol_time_ms = 0

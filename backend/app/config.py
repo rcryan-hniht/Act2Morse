@@ -66,10 +66,10 @@ def load_settings() -> Settings:
             os.path.join(_BACKEND_DIR, "models", "palm_detection_mediapipe_2023feb.onnx"),
         ),
         allowed_origins=tuple(o.strip() for o in origins_raw.split(",") if o.strip()),
-        close_threshold=_env_float("CLOSE_THRESHOLD", 0.5),   # was 0.6; lighter blinks reach ~0.5
-        open_threshold=_env_float("OPEN_THRESHOLD", 0.25),    # was 0.4; ensures clean reopen signal
-        min_blink_ms=_env_int("MIN_BLINK_MS", 80),            # was 200; 22fps = 45ms/frame, 80ms = ~2 frames
-        dot_max_ms=_env_int("DOT_MAX_MS", 600),               # was 500; more room for dot at low fps
-        letter_gap_ms=_env_int("LETTER_GAP_MS", 1200),        # was 1500
-        word_gap_ms=_env_int("WORD_GAP_MS", 2500),            # was 3000
+        close_threshold=_env_float("CLOSE_THRESHOLD", 0.5),   # lighter blinks reach ~0.5
+        open_threshold=_env_float("OPEN_THRESHOLD", 0.25),    # ensures clean reopen signal
+        min_blink_ms=_env_int("MIN_BLINK_MS", 80),            # ~2 frames at 25fps
+        dot_max_ms=_env_int("DOT_MAX_MS", 380),               # <380ms is Dot, >=380ms is Dash (hold)
+        letter_gap_ms=_env_int("LETTER_GAP_MS", 2200),        # 2.2s pause before finalizing letter
+        word_gap_ms=_env_int("WORD_GAP_MS", 5000),            # 5.0s pause before adding word space
     )

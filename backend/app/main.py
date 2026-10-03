@@ -94,8 +94,8 @@ async def _handle_fin_frame(
     events: list[str] = []
     symbol = hand_res.get("symbol")
     if symbol in (".", "-"):
-        session.decoder.add_symbol(symbol)
-        events.append("dot" if symbol == "." else "dash")
+        if session.add_symbol_debounced(symbol, now_ms):
+            events.append("dot" if symbol == "." else "dash")
 
     return {
         "mode": "Fin2Morse",
@@ -185,9 +185,10 @@ async def ws(websocket: WebSocket) -> None:
                 elif isinstance(parsed, dict) and parsed.get("type") == "symbol":
                     sym = parsed.get("symbol")
                     events: list[str] = []
+                    now_ms = int(time.monotonic() * 1000)
                     if sym in (".", "-"):
-                        session.decoder.add_symbol(sym)
-                        events.append("dot" if sym == "." else "dash")
+                        if session.add_symbol_debounced(sym, now_ms):
+                            events.append("dot" if sym == "." else "dash")
                     reply = {
                         "mode": session.mode,
                         "face": True,
