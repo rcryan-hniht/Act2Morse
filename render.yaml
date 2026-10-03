@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: act2morse-backend
+    name: act2morse
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend

@@ -30,3 +30,5 @@ backend/models/
 # Agent docs (local only)
 AGENTS.md
 
+.vercel
+.env*
