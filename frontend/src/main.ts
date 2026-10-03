@@ -7,7 +7,7 @@ import {
   DEFAULT_THRESHOLDS,
 } from './morse.ts';
 import { morseAudio } from './audio.ts';
-import { cameraController, type CameraMetrics, type BlinkEvent } from './camera.ts';
+import { cameraController, type CameraMetrics, type BlinkEvent, type FingerTapEvent } from './camera.ts';
 import { wsBridge, type ConnectionStatus, type BackendResponse, type BackendMessage } from './ws.ts';
 
 // State management
@@ -248,9 +248,18 @@ async function toggleCamera() {
 
       btnToggleCamText.textContent = 'Stop Camera';
       if (navBtnAction) navBtnAction.textContent = 'Stop Camera';
-      camStatusDot.style.background = '#10B981';
-      camStatusText.textContent = 'LIVE TRACKING';
-      showToast('Live eye camera activated');
+
+      if (currentMode === 'Fin2Morse') {
+        cameraController.setMode('Fin2Morse');
+        camStatusDot.style.background = '#10B981';
+        camStatusText.textContent = 'HAND TRACKING ACTIVE';
+        showToast('🖐️ Fin camera activated (Hand & Finger Tracking)');
+      } else {
+        cameraController.setMode('Blink2Morse');
+        camStatusDot.style.background = '#10B981';
+        camStatusText.textContent = 'EYE TRACKING ACTIVE';
+        showToast('👁️ Blink camera activated (Eye Tracking)');
+      }
     } else {
       btnToggleCamText.textContent = 'Launch Camera';
       if (navBtnAction) navBtnAction.textContent = 'Start Camera';
@@ -275,6 +284,7 @@ async function toggleCamera() {
  * Handle Blink events from camera
  */
 function handleBlinkEvent(event: BlinkEvent) {
+  if (currentMode !== 'Blink2Morse') return;
   const result = classifyBlink(event.durationMs);
 
   if (result.symbol === '.') {
@@ -290,34 +300,56 @@ function handleBlinkEvent(event: BlinkEvent) {
 
 function flashCameraStatus(label: string) {
   camStatusDot.classList.add('blinking');
-  camStatusText.textContent = `BLINK: ${label}`;
+  camStatusText.textContent = `${label}`;
   setTimeout(() => {
     camStatusDot.classList.remove('blinking');
     if (isCameraActive) {
-      camStatusText.textContent = 'LIVE TRACKING';
+      camStatusText.textContent = currentMode === 'Fin2Morse' ? 'HAND TRACKING' : 'LIVE TRACKING';
     }
   }, 350);
 }
 
 /**
- * Camera metrics updates
+ * Camera metrics updates (Dual-mode: Hand in Fin2Morse, Eye in Blink2Morse)
  */
 cameraController.onMetrics((metrics: CameraMetrics) => {
-  if (isCameraActive && !wsBridge.isConnected()) {
-    camStatusText.textContent = `${metrics.isBlinking ? 'BLINK' : 'TRACKING'} • ${metrics.fps} FPS`;
+  if (!isCameraActive) return;
+
+  if (currentMode === 'Fin2Morse') {
+    if (metrics.isHandDetected) {
+      camStatusDot.style.background = '#10B981';
+      camStatusText.textContent = metrics.isFingerTapping
+        ? 'FINGER TAP DETECTED'
+        : `HAND ACTIVE • ${metrics.fps} FPS`;
+    } else {
+      camStatusDot.style.background = '#F59E0B';
+      camStatusText.textContent = 'SHOW HAND TO CAMERA';
+    }
+  } else {
+    if (!wsBridge.isConnected()) {
+      camStatusText.textContent = `${metrics.isBlinking ? 'BLINK' : 'TRACKING'} • ${metrics.fps} FPS`;
+    }
   }
 });
 
-// Stream captured frames to AI backend via WebSocket with backpressure
+// Stream captured frames to AI backend via WebSocket (only when in Blink mode)
 cameraController.onFrame((canvas: HTMLCanvasElement) => {
-  if (isCameraActive && wsBridge.isConnected()) {
+  if (isCameraActive && wsBridge.isConnected() && currentMode === 'Blink2Morse') {
     wsBridge.sendFrame(canvas);
   }
 });
 
-// Handle blinks detected by client vision fallback (when backend is offline)
+// Handle camera finger taps in Fin2Morse mode
+cameraController.onFingerTap((event: FingerTapEvent) => {
+  if (currentMode === 'Fin2Morse') {
+    appendSymbol(event.symbol);
+    flashCameraStatus(event.symbol === '.' ? 'FINGER DOT (•)' : 'FINGER DASH (—)');
+  }
+});
+
+// Handle blinks detected by client vision fallback (in Blink2Morse mode)
 cameraController.onBlink((event: BlinkEvent) => {
-  if (!wsBridge.isConnected()) {
+  if (!wsBridge.isConnected() && currentMode === 'Blink2Morse') {
     handleBlinkEvent(event);
   }
 });
@@ -329,13 +361,13 @@ wsBridge.onStatusChange((status: ConnectionStatus) => {
   if (status === 'connected') {
     showToast('🟢 Connected to AI Backend (MediaPipe)');
     cameraController.setBackendState(true, null, false, false);
-    if (isCameraActive) {
+    if (isCameraActive && currentMode === 'Blink2Morse') {
       camStatusDot.style.background = '#10B981';
       camStatusText.textContent = 'AI BACKEND READY';
     }
   } else {
     cameraController.setBackendState(false, null, false, false);
-    if (isCameraActive) {
+    if (isCameraActive && currentMode === 'Blink2Morse') {
       camStatusDot.style.background = '#6B7280';
       camStatusText.textContent = 'LOCAL VISION (AI Offline)';
     }
@@ -347,7 +379,10 @@ wsBridge.onResponse((res: BackendResponse) => {
 
   if (!isCameraActive) return;
 
-  // Visual status indicators
+  // In Fin2Morse mode: Hand tracking is active, do NOT use face landmarks from backend!
+  if (currentMode === 'Fin2Morse') return;
+
+  // Visual status indicators for Blink mode
   if (!res.face) {
     camStatusDot.style.background = '#F59E0B';
     camStatusText.textContent = 'LOOK AT CAMERA (NO FACE)';
@@ -647,20 +682,30 @@ function setupEventListeners() {
   // Mode Switcher: Fin2Morse vs Blink2Morse
   btnModeFinger?.addEventListener('click', () => {
     currentMode = 'Fin2Morse';
+    cameraController.setMode('Fin2Morse');
     btnModeFinger?.classList.add('active');
     btnModeBlink?.classList.remove('active');
-    floatingBarStatus.textContent = 'Fin2Morse Active (Finger Tap)';
-    floatingBarSub.textContent = 'Tap pad, Spacebar, or screen (Hold <380ms = • Dot, Hold >380ms = — Dash)';
+    floatingBarStatus.textContent = 'Fin2Morse Active (Hand & Finger Tap)';
+    floatingBarSub.textContent = 'Tap pad, Spacebar, or show hand to camera (Hold <380ms = • Dot, Hold >380ms = — Dash)';
+    if (isCameraActive) {
+      camStatusDot.style.background = '#10B981';
+      camStatusText.textContent = 'HAND TRACKING';
+    }
     updateDisplay();
-    showToast('🖐️ Switched to Fin2Morse (Finger / Tactile Mode)');
+    showToast('🖐️ Switched to Fin2Morse (Pure Hand & Finger Tracking)');
   });
 
   btnModeBlink?.addEventListener('click', () => {
     currentMode = 'Blink2Morse';
+    cameraController.setMode('Blink2Morse');
     btnModeBlink.classList.add('active');
     btnModeFinger?.classList.remove('active');
-    floatingBarStatus.textContent = 'Blink2Morse Active';
+    floatingBarStatus.textContent = 'Blink2Morse Active (Eye Tracking)';
     floatingBarSub.textContent = 'Tracking eye movements (Short=Dot, Long=Dash)';
+    if (isCameraActive) {
+      camStatusDot.style.background = '#10B981';
+      camStatusText.textContent = 'EYE TRACKING';
+    }
     updateDisplay();
     showToast('👁️ Switched to Blink2Morse (Eye Tracking Mode)');
   });
