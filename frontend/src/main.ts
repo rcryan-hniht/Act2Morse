@@ -34,9 +34,10 @@ const navBtnAction = document.getElementById('navBtnAction') as HTMLButtonElemen
 const btnModeFinger = document.getElementById('btnModeFinger') as HTMLButtonElement | null;
 const btnModeBlink = document.getElementById('btnModeBlink') as HTMLButtonElement | null;
 const navLinkDocs = document.getElementById('navLinkDocs') as HTMLElement | null;
-const docsModal = document.getElementById('docsModal') as HTMLElement | null;
-const docsModalClose = document.getElementById('docsModalClose') as HTMLButtonElement | null;
-const docsBtnJumpChart = document.getElementById('docsBtnJumpChart') as HTMLButtonElement | null;
+const morseFlipContainer = document.getElementById('morseFlipContainer') as HTMLElement | null;
+const morseFlipInner = document.getElementById('morseFlipInner') as HTMLElement | null;
+const btnFlipToDocs = document.getElementById('btnFlipToDocs') as HTMLButtonElement | null;
+const btnFlipToChart = document.getElementById('btnFlipToChart') as HTMLButtonElement | null;
 
 let currentMode: 'Fin2Morse' | 'Blink2Morse' = 'Fin2Morse';
 let fingerTapStartTime = 0;
@@ -439,35 +440,42 @@ function setupEventListeners() {
     showToast('👁️ Switched to Blink2Morse (Eye Tracking Mode)');
   });
 
-  // Docs Modal handlers
-  const openDocs = () => {
-    docsModal?.classList.add('open');
+  // 3D Flip Card: Docs (Fin & Blink mode cards) vs Morse Alphabet Chart
+  const flipToDocs = () => {
+    morseFlipInner?.classList.add('is-flipped');
+    navLinkDocs?.classList.add('active');
+    morseFlipContainer?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    showToast('📖 Flipped to Mode Docs (Fin & Blink)');
   };
-  const closeDocs = () => {
-    docsModal?.classList.remove('open');
+
+  const flipToChart = () => {
+    morseFlipInner?.classList.remove('is-flipped');
+    navLinkDocs?.classList.remove('active');
+    morseFlipContainer?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    showToast('🔢 Flipped back to Morse Alphabet Chart');
+  };
+
+  const toggleFlip = () => {
+    if (morseFlipInner?.classList.contains('is-flipped')) {
+      flipToChart();
+    } else {
+      flipToDocs();
+    }
   };
 
   navLinkDocs?.addEventListener('click', (e) => {
     e.preventDefault();
-    openDocs();
+    toggleFlip();
   });
 
-  docsModalClose?.addEventListener('click', closeDocs);
-  docsModal?.addEventListener('click', (e) => {
-    if (e.target === docsModal) closeDocs();
-  });
+  btnFlipToDocs?.addEventListener('click', flipToDocs);
+  btnFlipToChart?.addEventListener('click', flipToChart);
 
-  docsBtnJumpChart?.addEventListener('click', () => {
-    closeDocs();
-    morseChartPanel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    morseChartPanel?.classList.add('pulse-highlight');
-    setTimeout(() => morseChartPanel?.classList.remove('pulse-highlight'), 600);
-    showToast('Morse Chart beside camera');
-  });
-
-  // Morse Chart highlight / focus
+  // Morse Chart highlight / focus from console button
   btnOpenAlphabet.addEventListener('click', () => {
-    morseChartPanel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (morseFlipInner?.classList.contains('is-flipped')) {
+      flipToChart();
+    }
     morseChartPanel?.classList.add('pulse-highlight');
     setTimeout(() => morseChartPanel?.classList.remove('pulse-highlight'), 600);
     showToast('Morse Chart is beside the camera');
@@ -475,8 +483,8 @@ function setupEventListeners() {
 
   // Keyboard accessibility and Fin2Morse tactile input
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && docsModal?.classList.contains('open')) {
-      closeDocs();
+    if (e.key === 'Escape' && morseFlipInner?.classList.contains('is-flipped')) {
+      flipToChart();
       return;
     }
     if (e.code === 'KeyD' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
