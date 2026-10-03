@@ -479,11 +479,11 @@ wsBridge.onResponse((res: BackendResponse) => {
     if (res.hand_detected) {
       camStatusDot.style.background = '#10B981';
       camStatusText.textContent = res.is_finger_tapping
-        ? 'AI: FINGER TAP DETECTED'
-        : `AI HAND ACTIVE (opencv) • ${Math.round((res.hand_confidence ?? 0.95) * 100)}%`;
+        ? `AI: FINGER TAP DETECTED • ${cameraController.getFps()} FPS`
+        : `AI HAND ACTIVE (opencv) • ${Math.round((res.hand_confidence ?? 0.95) * 100)}% • ${cameraController.getFps()} FPS`;
     } else {
       camStatusDot.style.background = '#F59E0B';
-      camStatusText.textContent = 'SHOW HAND TO CAMERA';
+      camStatusText.textContent = `SHOW HAND TO CAMERA • ${cameraController.getFps()} FPS`;
     }
   } else {
     // In Blink2Morse mode: Eye tracking from backend (MichalMlodawski/open-closed-eye-classification-mobilev2)

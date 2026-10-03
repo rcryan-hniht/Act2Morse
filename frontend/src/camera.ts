@@ -138,7 +138,7 @@ export class CameraController {
         'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
       );
 
-      // Try local asset first, then fallback to cloud URL if needed
+      // Try GPU delegate first, fallback to CPU delegate
       try {
         this.gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
           baseOptions: {
@@ -146,16 +146,22 @@ export class CameraController {
             delegate: 'GPU',
           },
           runningMode: 'VIDEO',
-          numHands: 2,
+          numHands: 1,
+          minHandDetectionConfidence: 0.5,
+          minHandPresenceConfidence: 0.5,
+          minTrackingConfidence: 0.5,
         });
       } catch {
         this.gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task',
+            modelAssetPath: '/models/hand_gesture.task',
             delegate: 'CPU',
           },
           runningMode: 'VIDEO',
-          numHands: 2,
+          numHands: 1,
+          minHandDetectionConfidence: 0.5,
+          minHandPresenceConfidence: 0.5,
+          minTrackingConfidence: 0.5,
         });
       }
     } catch (err) {
@@ -172,8 +178,9 @@ export class CameraController {
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 60, min: 30 },
           facingMode: 'user',
         },
         audio: false,
@@ -253,6 +260,10 @@ export class CameraController {
     return this.isHandDetected;
   }
 
+  public getFps(): number {
+    return this.currentFps;
+  }
+
   public setBackendState(connected: boolean, score: number | null, face: boolean, eyesClosed: boolean) {
     this.backendConnected = connected;
     this.backendScore = score;
@@ -311,7 +322,7 @@ export class CameraController {
     const vw = this.videoEl.videoWidth || 640;
     const vh = this.videoEl.videoHeight || 480;
 
-    const scale = Math.min(1, 640 / vw);
+    const scale = Math.min(1, 320 / vw);
     const tw = Math.round(vw * scale);
     const th = Math.round(vh * scale);
 
@@ -376,7 +387,7 @@ export class CameraController {
     let hasHandModelResults = false;
 
     // 1. Run MediaPipe Gesture Recognizer model if loaded
-    if (this.gestureRecognizer && now > this.lastRecognizeTime + 25) {
+    if (this.gestureRecognizer && now > this.lastRecognizeTime) {
       this.lastRecognizeTime = now;
       try {
         const results = this.gestureRecognizer.recognizeForVideo(this.videoEl, now);
@@ -440,8 +451,8 @@ export class CameraController {
       this.onMetricsCallbacks.forEach((cb) => cb(metrics));
     }
 
-    // 3. Stream frames to WebSocket backend in Fin2Morse mode as well (every 50ms = 20fps)
-    if (now - this.lastFrameSentTime >= 50) {
+    // 3. Stream frames to WebSocket backend in Fin2Morse mode (every 66ms ~ 15fps)
+    if (now - this.lastFrameSentTime >= 66) {
       this.lastFrameSentTime = now;
       const tx = this.prepareTransmissionCanvas();
       if (tx) {
@@ -508,34 +519,27 @@ export class CameraController {
         this.handConfidence = 0.95;
       }
 
-      // 1. RENDER ĐỐT NGÓN TAY MÀU TRẮNG (#FFFFFF)
+      // Precompute all 21 landmark canvas coordinates once
+      const pts = landmarks.map((p) => this.videoToCanvasCoord(p.x, p.y, targetW, targetH));
+
+      // 1. RENDER ĐỐT NGÓN TAY MÀU TRẮNG (#FFFFFF) - Batched single-path draw (no shadow blur overhead)
       ctx.strokeStyle = '#FFFFFF';
       ctx.lineWidth = Math.round(3.2 * dpr);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.45)';
-      ctx.shadowBlur = Math.round(6 * dpr);
 
+      ctx.beginPath();
       for (const [startIdx, endIdx] of HAND_CONNECTIONS) {
-        const p1 = landmarks[startIdx];
-        const p2 = landmarks[endIdx];
-
-        const pt1 = this.videoToCanvasCoord(p1.x, p1.y, targetW, targetH);
-        const pt2 = this.videoToCanvasCoord(p2.x, p2.y, targetW, targetH);
-
-        ctx.beginPath();
+        const pt1 = pts[startIdx];
+        const pt2 = pts[endIdx];
         ctx.moveTo(pt1.x, pt1.y);
         ctx.lineTo(pt2.x, pt2.y);
-        ctx.stroke();
       }
-
-      ctx.shadowBlur = 0;
+      ctx.stroke();
 
       // 2. RENDER ĐIỂM TỪNG NGÓN MÀU CYAN (#00FFFF)
-      for (let i = 0; i < landmarks.length; i++) {
-        const p = landmarks[i];
-        const pt = this.videoToCanvasCoord(p.x, p.y, targetW, targetH);
-
+      for (let i = 0; i < pts.length; i++) {
+        const pt = pts[i];
         const isTip = (i === 4 || i === 8 || i === 12 || i === 16 || i === 20);
         const radius = isTip ? Math.round(6.5 * dpr) : Math.round(4 * dpr);
 
@@ -564,23 +568,23 @@ export class CameraController {
 
       // 3. Special Gestures Detection
       // Key Landmark coordinates in canvas space
-      const pWrist = this.videoToCanvasCoord(landmarks[0].x, landmarks[0].y, targetW, targetH);
-      const pThumbTip = this.videoToCanvasCoord(landmarks[4].x, landmarks[4].y, targetW, targetH);
-      const pThumbMcp = this.videoToCanvasCoord(landmarks[2].x, landmarks[2].y, targetW, targetH);
+      const pWrist = pts[0];
+      const pThumbTip = pts[4];
+      const pThumbMcp = pts[2];
 
-      const pIndexMcp = this.videoToCanvasCoord(landmarks[5].x, landmarks[5].y, targetW, targetH);
-      const pIndexPip = this.videoToCanvasCoord(landmarks[6].x, landmarks[6].y, targetW, targetH);
-      const pIndexTip = this.videoToCanvasCoord(landmarks[8].x, landmarks[8].y, targetW, targetH);
+      const pIndexMcp = pts[5];
+      const pIndexPip = pts[6];
+      const pIndexTip = pts[8];
 
-      const pMiddleMcp = this.videoToCanvasCoord(landmarks[9].x, landmarks[9].y, targetW, targetH);
-      const pMiddlePip = this.videoToCanvasCoord(landmarks[10].x, landmarks[10].y, targetW, targetH);
-      const pMiddleTip = this.videoToCanvasCoord(landmarks[12].x, landmarks[12].y, targetW, targetH);
+      const pMiddleMcp = pts[9];
+      const pMiddlePip = pts[10];
+      const pMiddleTip = pts[12];
 
-      const pRingPip = this.videoToCanvasCoord(landmarks[14].x, landmarks[14].y, targetW, targetH);
-      const pRingTip = this.videoToCanvasCoord(landmarks[16].x, landmarks[16].y, targetW, targetH);
+      const pRingPip = pts[14];
+      const pRingTip = pts[16];
 
-      const pPinkyPip = this.videoToCanvasCoord(landmarks[18].x, landmarks[18].y, targetW, targetH);
-      const pPinkyTip = this.videoToCanvasCoord(landmarks[20].x, landmarks[20].y, targetW, targetH);
+      const pPinkyPip = pts[18];
+      const pPinkyTip = pts[20];
 
       const palmScale = Math.hypot(pWrist.x - pMiddleMcp.x, pWrist.y - pMiddleMcp.y) || 60;
 
@@ -699,8 +703,8 @@ export class CameraController {
       const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
 
       const isPinching = (!isFist && !isThumbPointingLeft) && pinchDist < 0.082;
-      const ptThumb = this.videoToCanvasCoord(thumbTip.x, thumbTip.y, targetW, targetH);
-      const ptIndex = this.videoToCanvasCoord(indexTip.x, indexTip.y, targetW, targetH);
+      const ptThumb = pts[4];
+      const ptIndex = pts[8];
       const midX = (ptThumb.x + ptIndex.x) / 2;
       const midY = (ptThumb.y + ptIndex.y) / 2;
 
@@ -747,8 +751,7 @@ export class CameraController {
       }
 
       // 4. Gesture Name Chip above Hand
-      const wrist = landmarks[0];
-      const ptWrist = this.videoToCanvasCoord(wrist.x, wrist.y, targetW, targetH);
+      const ptWrist = pts[0];
       const wx = ptWrist.x;
       const wy = Math.max(Math.round(25 * dpr), ptWrist.y - Math.round(25 * dpr));
 
