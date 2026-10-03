@@ -116,24 +116,54 @@ const MORSE_MAP: Record<string, string> = {
               <div class="output-display-box">
                 <div>
                   <div class="morse-stream-symbols" id="morseSymbolsDisplay">
-                    <span class="morse-placeholder">Blink or tap buttons below to transmit...</span>
+                    <span class="morse-placeholder">Blink or tap pad / buttons below to transmit...</span>
                   </div>
                 </div>
                 <div class="decoded-text-box">
                   <span class="decoded-caption">Decoded Text:</span>
-                  <span class="decoded-result" id="decodedTextDisplay">—</span>
+                  <span class="decoded-result" id="decodedTextDisplay">
+                    <span class="decoded-placeholder">Waiting for Morse...</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Fin2Morse Tactile Tap Pad (Hold <380ms Dot • | Hold >380ms Dash —) -->
+              <div class="fin-tap-zone" id="finTapZone" role="button" tabindex="0" title="Touch & hold here: <380ms Dot (•) | >380ms Dash (—)">
+                <div class="fin-tap-header">
+                  <div class="fin-tap-brand">
+                    <span class="fin-tap-indicator" id="finTapIndicator"></span>
+                    <span class="fin-tap-title" id="finTapTitle">Fin2Morse Tactile Tap Pad</span>
+                  </div>
+                  <span class="fin-tap-badge" id="finTapBadge">HOLD: &lt;380ms • | &gt;380ms —</span>
+                </div>
+                <div class="fin-tap-body">
+                  <div class="fin-tap-icon-wrap" id="finTapIconWrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5"/>
+                      <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
+                      <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
+                      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+                    </svg>
+                  </div>
+                  <div class="fin-tap-info">
+                    <span class="fin-tap-status" id="finTapStatus">Touch or Click to input Morse</span>
+                    <span class="fin-tap-sub" id="finTapSub">Release &lt;380ms = • Dot | Hold &gt;380ms = — Dash</span>
+                  </div>
+                </div>
+                <div class="fin-hold-track" aria-hidden="true">
+                  <div class="fin-hold-progress" id="finHoldProgress"></div>
                 </div>
               </div>
 
               <!-- Interactive Simulator Buttons -->
               <div class="simulation-row">
-                <button class="btn-sim btn-sim-accent" id="btnSimDot" title="Simulate Dot (<380ms)" type="button">
+                <button class="btn-sim btn-sim-accent" id="btnSimDot" title="Dot (<380ms / D key)" type="button">
                   <span>•</span> Dot
                 </button>
-                <button class="btn-sim btn-sim-accent" id="btnSimDash" title="Simulate Dash (>380ms)" type="button">
+                <button class="btn-sim btn-sim-accent" id="btnSimDash" title="Dash (>380ms / F key)" type="button">
                   <span>—</span> Dash
                 </button>
-                <button class="btn-sim" id="btnSimSpace" title="Letter / Word Pause" type="button">
+                <button class="btn-sim" id="btnSimSpace" title="Finalize Letter / Space" type="button">
                   <span>␣</span> Space
                 </button>
                 <button class="btn-sim" id="btnSimClear" title="Clear Buffer" type="button">

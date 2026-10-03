@@ -64,22 +64,34 @@ export const REVERSE_MORSE: Record<string, string> = Object.entries(MORSE_TABLE)
 );
 
 export interface BlinkThresholds {
-  minNoiseMs: number;     // Below this is considered noise/flutter (< 120ms)
-  shortDotMaxMs: number;  // 120ms - 400ms is Dot (•)
-  longDashMaxMs: number;  // 400ms - 1200ms is Dash (—)
-  letterPauseMs: number;  // Open eye > 800ms completes a letter
-  wordPauseMs: number;    // Open eye > 2000ms appends a word space
+  minNoiseMs: number;     // Below this is considered noise/flutter (< 100ms)
+  shortDotMaxMs: number;  // 100ms - 380ms is Dot (•)
+  longDashMaxMs: number;  // 380ms - 1400ms is Dash (—)
+  letterPauseMs: number;  // Blink mode: open eye > 1000ms completes a letter
+  finLetterPauseMs: number; // Fin mode: inter-tap pause > 1600ms completes a letter
+  wordPauseMs: number;    // Open eye / pause > 2800ms appends a word space
 }
 
 export const DEFAULT_THRESHOLDS: BlinkThresholds = {
   minNoiseMs: 100,
   shortDotMaxMs: 380,
-  longDashMaxMs: 1200,
-  letterPauseMs: 850,
-  wordPauseMs: 2200,
+  longDashMaxMs: 1400,
+  letterPauseMs: 1000,
+  finLetterPauseMs: 1600,
+  wordPauseMs: 2800,
 };
 
 export type BlinkSymbol = '.' | '-' | 'noise' | 'invalid';
+
+/**
+ * Classifies a finger tap duration into a Morse symbol (. or -)
+ */
+export function classifyFingerTap(
+  durationMs: number,
+  shortDotMaxMs: number = DEFAULT_THRESHOLDS.shortDotMaxMs
+): '.' | '-' {
+  return durationMs < shortDotMaxMs ? '.' : '-';
+}
 
 /**
  * Classifies a blink duration into a Morse symbol.

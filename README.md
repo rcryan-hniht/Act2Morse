@@ -1,7 +1,7 @@
 # Act2Morse
 
 > **Real-time Assistive Communication Platform for Non-Verbal, Deaf-Mute, and Motor-Impaired Individuals**  
-> *Transforming Micro Physical Actions into Living Words via Morse Code*
+> _Transforming Micro Physical Actions into Living Words via Morse Code_
 
 ---
 
@@ -72,9 +72,14 @@ Communication is a fundamental human right. However, millions of people worldwid
 
 ---
 
-## 🚀 Quickstart Guide
+#  Installation
 
 ### Prerequisites
+
+```bash
+git clone https://github.com/rcryan-hniht/Act2Morse
+```
+
 - **Node.js** (v18+) & **pnpm** (or npm)
 - **Python** (v3.11+) & **uv** (or pip)
 - A working webcam
@@ -136,31 +141,31 @@ Open your browser at **`http://localhost:5173`**.
 
 Backend detection parameters can be customized via environment variables:
 
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `CLOSE_THRESHOLD` | `0.5` | Blendshape closure score to trigger eye-closed state (0.0 – 1.0) |
-| `OPEN_THRESHOLD` | `0.25` | Blendshape score to trigger eye-open state (hysteresis gap) |
-| `MIN_BLINK_MS` | `80` | Minimum blink duration in milliseconds (filters micro-glitches) |
-| `DOT_MAX_MS` | `600` | Maximum duration for a Dot; closures exceeding this are Dashes |
-| `LETTER_GAP_MS` | `1200` | Open-eye pause duration to finalize a character |
-| `WORD_GAP_MS` | `2500` | Open-eye pause duration to insert a word space |
+| Variable          | Default | Description                                                      |
+| :---------------- | :------ | :--------------------------------------------------------------- |
+| `CLOSE_THRESHOLD` | `0.5`   | Blendshape closure score to trigger eye-closed state (0.0 – 1.0) |
+| `OPEN_THRESHOLD`  | `0.25`  | Blendshape score to trigger eye-open state (hysteresis gap)      |
+| `MIN_BLINK_MS`    | `80`    | Minimum blink duration in milliseconds (filters micro-glitches)  |
+| `DOT_MAX_MS`      | `600`   | Maximum duration for a Dot; closures exceeding this are Dashes   |
+| `LETTER_GAP_MS`   | `1200`  | Open-eye pause duration to finalize a character                  |
+| `WORD_GAP_MS`     | `2500`  | Open-eye pause duration to insert a word space                   |
 
 ---
 
 ## 📜 International Morse Code Reference
 
-| Char | Morse | Char | Morse | Char | Morse | Digit | Morse |
-| :---: | :--- | :---: | :--- | :---: | :--- | :---: | :--- |
-| **A** | `.-` | **J** | `.---` | **S** | `...` | **1** | `.----` |
-| **B** | `-...` | **K** | `-.-` | **T** | `-` | **2** | `..---` |
-| **C** | `-.-.` | **L** | `.-..` | **U** | `..-` | **3** | `...--` |
-| **D** | `-..` | **M** | `--` | **V** | `...-` | **4** | `....-` |
-| **E** | `.` | **N** | `-.` | **W** | `.--` | **5** | `.....` |
-| **F** | `..-.` | **O** | `---` | **X** | `-..-` | **6** | `-....` |
-| **G** | `--.` | **P** | `.--.` | **Y** | `-.--` | **7** | `--...` |
+| Char  | Morse  | Char  | Morse  | Char  | Morse  | Digit | Morse   |
+| :---: | :----- | :---: | :----- | :---: | :----- | :---: | :------ |
+| **A** | `.-`   | **J** | `.---` | **S** | `...`  | **1** | `.----` |
+| **B** | `-...` | **K** | `-.-`  | **T** | `-`    | **2** | `..---` |
+| **C** | `-.-.` | **L** | `.-..` | **U** | `..-`  | **3** | `...--` |
+| **D** | `-..`  | **M** | `--`   | **V** | `...-` | **4** | `....-` |
+| **E** | `.`    | **N** | `-.`   | **W** | `.--`  | **5** | `.....` |
+| **F** | `..-.` | **O** | `---`  | **X** | `-..-` | **6** | `-....` |
+| **G** | `--.`  | **P** | `.--.` | **Y** | `-.--` | **7** | `--...` |
 | **H** | `....` | **Q** | `--.-` | **Z** | `--..` | **8** | `---..` |
-| **I** | `..` | **R** | `.-.` | | | **9** | `----.` |
-| | | | | | | **0** | `-----` |
+| **I** | `..`   | **R** | `.-.`  |       |        | **9** | `----.` |
+|       |        |       |        |       |        | **0** | `-----` |
 
 ---
 

@@ -2,6 +2,7 @@ import './style.css';
 import {
   MORSE_TABLE,
   classifyBlink,
+  classifyFingerTap,
   decodeMorseSequence,
   DEFAULT_THRESHOLDS,
 } from './morse.ts';
@@ -16,6 +17,43 @@ let letterTimeoutId: number | null = null;
 let wordTimeoutId: number | null = null;
 let isAudioEnabled: boolean = true;
 let isCameraActive: boolean = false;
+let isFingerHolding: boolean = false;
+let holdAnimFrameId: number | null = null;
+let currentMode: 'Fin2Morse' | 'Blink2Morse' = 'Fin2Morse';
+let fingerTapStartTime = 0;
+
+/**
+ * Returns the pause duration required before auto-finalizing a character into text.
+ * Fin2Morse uses a comfortable 1600ms gap so users can easily tap multi-dash numbers (e.g. '0' = '-----').
+ */
+function getLetterPauseMs(): number {
+  return currentMode === 'Fin2Morse'
+    ? DEFAULT_THRESHOLDS.finLetterPauseMs
+    : DEFAULT_THRESHOLDS.letterPauseMs;
+}
+
+/**
+ * Cancels pending letter/word finalization timers while user is actively typing or holding a tap.
+ */
+function cancelPendingFinalizeTimers() {
+  if (letterTimeoutId !== null) {
+    clearTimeout(letterTimeoutId);
+    letterTimeoutId = null;
+  }
+  if (wordTimeoutId !== null) {
+    clearTimeout(wordTimeoutId);
+    wordTimeoutId = null;
+  }
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 // DOM Elements
 const morseSymbolsDisplay = document.getElementById('morseSymbolsDisplay') as HTMLDivElement;
@@ -28,6 +66,14 @@ const btnSimClear = document.getElementById('btnSimClear') as HTMLButtonElement;
 const btnTransmit = document.getElementById('btnTransmit') as HTMLButtonElement;
 const btnSoundToggle = document.getElementById('btnSoundToggle') as HTMLButtonElement;
 
+// Tactile Tap Pad DOM
+const finTapZone = document.getElementById('finTapZone') as HTMLDivElement | null;
+const finTapStatus = document.getElementById('finTapStatus') as HTMLSpanElement | null;
+const finTapSub = document.getElementById('finTapSub') as HTMLSpanElement | null;
+const finHoldProgress = document.getElementById('finHoldProgress') as HTMLDivElement | null;
+const finTapIndicator = document.getElementById('finTapIndicator') as HTMLSpanElement | null;
+const finTapBadge = document.getElementById('finTapBadge') as HTMLSpanElement | null;
+const portraitBox = document.getElementById('portraitBox') as HTMLDivElement | null;
 
 // Navbar DOM
 const navBtnAction = document.getElementById('navBtnAction') as HTMLButtonElement | null;
@@ -38,9 +84,6 @@ const morseFlipContainer = document.getElementById('morseFlipContainer') as HTML
 const morseFlipInner = document.getElementById('morseFlipInner') as HTMLElement | null;
 const btnFlipToDocs = document.getElementById('btnFlipToDocs') as HTMLButtonElement | null;
 const btnFlipToChart = document.getElementById('btnFlipToChart') as HTMLButtonElement | null;
-
-let currentMode: 'Fin2Morse' | 'Blink2Morse' = 'Fin2Morse';
-let fingerTapStartTime = 0;
 
 // Camera DOM
 const btnToggleCamera = document.getElementById('btnToggleCamera') as HTMLButtonElement;
@@ -81,7 +124,10 @@ function showToast(message: string, durationMs: number = 2400) {
  */
 function updateDisplay() {
   if (currentMorseBuffer.length === 0) {
-    morseSymbolsDisplay.innerHTML = `<span class="morse-placeholder">Blink or tap buttons below to transmit...</span>`;
+    const placeholderMsg = currentMode === 'Fin2Morse'
+      ? 'Tap pad, Spacebar, or buttons below to transmit...'
+      : 'Blink eyes or tap buttons below to transmit...';
+    morseSymbolsDisplay.innerHTML = `<span class="morse-placeholder">${placeholderMsg}</span>`;
   } else {
     const formatted = currentMorseBuffer
       .split('')
@@ -94,7 +140,11 @@ function updateDisplay() {
     morseSymbolsDisplay.innerHTML = formatted;
   }
 
-  decodedTextDisplay.textContent = decodedText.length > 0 ? decodedText : '—';
+  if (decodedText.length > 0) {
+    decodedTextDisplay.innerHTML = `<span class="decoded-active-text">${escapeHtml(decodedText)}</span>`;
+  } else {
+    decodedTextDisplay.innerHTML = `<span class="decoded-placeholder">Waiting for Morse...</span>`;
+  }
 }
 
 function pulseFloatingIcon() {
@@ -105,46 +155,40 @@ function pulseFloatingIcon() {
 }
 
 /**
- * Appends a Morse symbol (. or -) and resets auto-pause timer
+ * Appends a Morse symbol (. or -) and resets auto-pause timer.
+ * Maintains client-side buffer integrity for tactile finger tapping and mirrors to backend.
  */
 function appendSymbol(symbol: '.' | '-') {
-  if (wsBridge.isConnected()) {
-    wsBridge.sendSymbol(symbol);
-    if (symbol === '.') {
-      morseAudio.playDot();
-      floatingBarStatus.textContent = `Blink: Dot (•)`;
-    } else {
-      morseAudio.playDash();
-      floatingBarStatus.textContent = `Blink: Dash (—)`;
-    }
-    pulseFloatingIcon();
-    return;
-  }
+  // Cancel previous finalize timer so multi-symbol sequences (e.g. '0' = '-----') don't get cut off
+  cancelPendingFinalizeTimers();
 
   currentMorseBuffer += symbol;
 
   if (symbol === '.') {
     morseAudio.playDot();
-    floatingBarStatus.textContent = `Blink: Dot (•)`;
-    floatingBarSub.textContent = `Buffer: ${currentMorseBuffer} → Potential: ${decodeMorseSequence(currentMorseBuffer)}`;
+    floatingBarStatus.textContent = currentMode === 'Fin2Morse' ? 'Fin: Dot (•)' : 'Blink: Dot (•)';
   } else {
     morseAudio.playDash();
-    floatingBarStatus.textContent = `Blink: Dash (—)`;
-    floatingBarSub.textContent = `Buffer: ${currentMorseBuffer} → Potential: ${decodeMorseSequence(currentMorseBuffer)}`;
+    floatingBarStatus.textContent = currentMode === 'Fin2Morse' ? 'Fin: Dash (—)' : 'Blink: Dash (—)';
   }
+
+  const potential = decodeMorseSequence(currentMorseBuffer);
+  const potentialLabel = potential && potential !== '?' ? `'${potential}'` : '...';
+  floatingBarSub.textContent = `Buffer: ${currentMorseBuffer} → Potential: ${potentialLabel}`;
 
   // Visual pulse on floating icon
   pulseFloatingIcon();
-
   updateDisplay();
 
-  // Reset character finalize timer
-  if (letterTimeoutId) clearTimeout(letterTimeoutId);
-  if (wordTimeoutId) clearTimeout(wordTimeoutId);
+  // If backend is connected, mirror symbol for remote session logging
+  if (wsBridge.isConnected()) {
+    wsBridge.sendSymbol(symbol);
+  }
 
+  // Reset character finalize timer
   letterTimeoutId = window.setTimeout(() => {
     finalizeCharacter();
-  }, DEFAULT_THRESHOLDS.letterPauseMs);
+  }, getLetterPauseMs());
 }
 
 /**
@@ -163,6 +207,10 @@ function finalizeCharacter() {
     floatingBarStatus.textContent = `Unknown Morse: "${currentMorseBuffer}"`;
   }
 
+  if (wsBridge.isConnected()) {
+    wsBridge.sendFinalize();
+  }
+
   currentMorseBuffer = '';
   updateDisplay();
 
@@ -173,7 +221,10 @@ function finalizeCharacter() {
       decodedText += ' ';
       morseAudio.playWordSpace();
       updateDisplay();
-      floatingBarSub.textContent = `Word pause detected (Space added)`;
+      floatingBarSub.textContent = 'Word pause detected (Space added)';
+      if (wsBridge.isConnected()) {
+        wsBridge.sendSpace();
+      }
     }
   }, DEFAULT_THRESHOLDS.wordPauseMs);
 }
@@ -336,15 +387,17 @@ wsBridge.onResponse((res: BackendResponse) => {
     }
   }
 
-  // Synchronize current symbols and decoded text from backend session
-  currentMorseBuffer = res.symbols;
-  decodedText = res.text;
-  updateDisplay();
+  // Synchronize vision symbols and decoded text from backend session only when camera is actively tracking
+  if (isCameraActive) {
+    currentMorseBuffer = res.symbols;
+    decodedText = res.text;
+    updateDisplay();
 
-  if (currentMorseBuffer.length > 0) {
-    floatingBarSub.textContent = `Buffer: ${currentMorseBuffer} → Potential: ${decodeMorseSequence(currentMorseBuffer)}`;
-  } else if (decodedText.length > 0) {
-    floatingBarSub.textContent = `Decoded: "${decodedText}"`;
+    if (currentMorseBuffer.length > 0) {
+      floatingBarSub.textContent = `Buffer: ${currentMorseBuffer} → Potential: ${decodeMorseSequence(currentMorseBuffer)}`;
+    } else if (decodedText.length > 0) {
+      floatingBarSub.textContent = `Decoded: "${decodedText}"`;
+    }
   }
 });
 
@@ -360,38 +413,208 @@ wsBridge.onMessage((msg: BackendMessage) => {
 wsBridge.connect();
 
 /**
+ * Tactile Hold Animation & Real-time Progress Tracking for Fin2Morse Tap Pad
+ */
+function startHoldAnimation() {
+  if (holdAnimFrameId !== null) {
+    cancelAnimationFrame(holdAnimFrameId);
+    holdAnimFrameId = null;
+  }
+
+  const updateMeter = () => {
+    if (!isFingerHolding || fingerTapStartTime === 0) return;
+    const elapsed = performance.now() - fingerTapStartTime;
+    const threshold = DEFAULT_THRESHOLDS.shortDotMaxMs; // 380ms
+    const progress = Math.min(100, (elapsed / threshold) * 100);
+
+    if (finHoldProgress) {
+      finHoldProgress.style.width = `${progress}%`;
+    }
+
+    if (elapsed >= threshold) {
+      finTapZone?.classList.add('is-dash-ready');
+      if (finTapStatus) finTapStatus.textContent = 'Hold threshold reached: [ — Dash ] (Ready to release!)';
+      if (finTapIndicator) finTapIndicator.style.background = '#111111';
+      if (finTapBadge) finTapBadge.textContent = 'DASH (>380ms)';
+    } else {
+      finTapZone?.classList.remove('is-dash-ready');
+      if (finTapStatus) finTapStatus.textContent = `Holding... [ • Dot ] (${Math.round(elapsed)}ms)`;
+      if (finTapIndicator) finTapIndicator.style.background = '#8B5CF6';
+      if (finTapBadge) finTapBadge.textContent = 'DOT (<380ms)';
+    }
+
+    holdAnimFrameId = requestAnimationFrame(updateMeter);
+  };
+
+  holdAnimFrameId = requestAnimationFrame(updateMeter);
+}
+
+function stopHoldAnimation() {
+  if (holdAnimFrameId !== null) {
+    cancelAnimationFrame(holdAnimFrameId);
+    holdAnimFrameId = null;
+  }
+  if (finHoldProgress) {
+    finHoldProgress.style.width = '0%';
+  }
+  if (finTapBadge) {
+    finTapBadge.textContent = 'HOLD: <380ms • | >380ms —';
+  }
+}
+
+function handleFingerTapDown() {
+  cancelPendingFinalizeTimers();
+  if (isFingerHolding) return;
+  isFingerHolding = true;
+  fingerTapStartTime = performance.now();
+
+  finTapZone?.classList.add('is-pressing');
+  finTapZone?.classList.remove('is-dash-ready');
+  floatingBarStatus.textContent = 'Fin2Morse: Pressing...';
+  pulseFloatingIcon();
+  startHoldAnimation();
+}
+
+function handleFingerTapUp() {
+  if (!isFingerHolding || fingerTapStartTime === 0) return;
+  const duration = performance.now() - fingerTapStartTime;
+  isFingerHolding = false;
+  fingerTapStartTime = 0;
+  stopHoldAnimation();
+
+  finTapZone?.classList.remove('is-pressing', 'is-dash-ready');
+  if (finTapIndicator) finTapIndicator.style.background = '#10B981';
+
+  const symbol = classifyFingerTap(duration);
+  appendSymbol(symbol);
+  flashCameraStatus(symbol === '.' ? 'DOT (•)' : 'DASH (—)');
+
+  if (finTapStatus) {
+    finTapStatus.textContent = symbol === '.'
+      ? `Registered: Dot (•) [${Math.round(duration)}ms]`
+      : `Registered: Dash (—) [${Math.round(duration)}ms]`;
+  }
+  if (finTapSub) {
+    const potential = decodeMorseSequence(currentMorseBuffer);
+    finTapSub.textContent = `Buffer: ${currentMorseBuffer} (Potential: '${potential}') — Tap again or pause to finalize`;
+  }
+}
+
+function handleFingerTapCancel() {
+  if (isFingerHolding) {
+    const duration = performance.now() - fingerTapStartTime;
+    if (duration > 60) {
+      handleFingerTapUp();
+    } else {
+      isFingerHolding = false;
+      fingerTapStartTime = 0;
+      stopHoldAnimation();
+      finTapZone?.classList.remove('is-pressing', 'is-dash-ready');
+      if (finTapIndicator) finTapIndicator.style.background = '#10B981';
+      if (finTapStatus) finTapStatus.textContent = 'Touch or Click to input Morse';
+    }
+  }
+}
+
+/**
  * Setup Event Listeners
  */
 function setupEventListeners() {
+  // Fin2Morse Tactile Tap Pad (Pointer events for Touch, Mouse & Pen with zero latency)
+  if (finTapZone) {
+    finTapZone.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      handleFingerTapDown();
+    });
+
+    finTapZone.addEventListener('pointerup', (e) => {
+      e.preventDefault();
+      handleFingerTapUp();
+    });
+
+    finTapZone.addEventListener('pointercancel', (e) => {
+      e.preventDefault();
+      handleFingerTapCancel();
+    });
+
+    finTapZone.addEventListener('pointerleave', () => {
+      if (isFingerHolding) {
+        handleFingerTapUp();
+      }
+    });
+
+    // Keyboard accessibility directly on the tap pad
+    finTapZone.addEventListener('keydown', (e) => {
+      if ((e.code === 'Space' || e.code === 'Enter') && !e.repeat) {
+        e.preventDefault();
+        handleFingerTapDown();
+      }
+    });
+
+    finTapZone.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' || e.code === 'Enter') {
+        e.preventDefault();
+        handleFingerTapUp();
+      }
+    });
+  }
+
+  // Portrait box touch support when in Fin2Morse mode
+  if (portraitBox) {
+    portraitBox.addEventListener('pointerdown', (e) => {
+      if (currentMode === 'Fin2Morse' && !isCameraActive) {
+        if ((e.target as HTMLElement).closest('button')) return;
+        e.preventDefault();
+        handleFingerTapDown();
+      }
+    });
+
+    portraitBox.addEventListener('pointerup', (e) => {
+      if (currentMode === 'Fin2Morse' && !isCameraActive && isFingerHolding) {
+        e.preventDefault();
+        handleFingerTapUp();
+      }
+    });
+  }
+
   // Simulator buttons
-  btnSimDot.addEventListener('click', () => appendSymbol('.'));
-  btnSimDash.addEventListener('click', () => appendSymbol('-'));
+  btnSimDot.addEventListener('click', () => {
+    cancelPendingFinalizeTimers();
+    appendSymbol('.');
+    flashCameraStatus('DOT (•)');
+  });
+
+  btnSimDash.addEventListener('click', () => {
+    cancelPendingFinalizeTimers();
+    appendSymbol('-');
+    flashCameraStatus('DASH (—)');
+  });
   
   btnSimSpace.addEventListener('click', () => {
-    if (wsBridge.isConnected()) {
-      wsBridge.sendSpace();
-      morseAudio.playWordSpace();
-      showToast('Word space added');
-      return;
-    }
     finalizeCharacter();
     if (decodedText.length > 0 && !decodedText.endsWith(' ')) {
       decodedText += ' ';
       morseAudio.playWordSpace();
+    }
+    if (wsBridge.isConnected()) {
+      wsBridge.sendSpace();
     }
     updateDisplay();
     showToast('Word space added');
   });
 
   btnSimClear.addEventListener('click', () => {
+    cancelPendingFinalizeTimers();
     currentMorseBuffer = '';
     decodedText = '';
-    if (letterTimeoutId) clearTimeout(letterTimeoutId);
-    if (wordTimeoutId) clearTimeout(wordTimeoutId);
-    wsBridge.sendReset();
+    if (wsBridge.isConnected()) {
+      wsBridge.sendReset();
+    }
     updateDisplay();
-    floatingBarStatus.textContent = 'Listening for blinks...';
-    floatingBarSub.textContent = 'Short <380ms = Dot (•) | Long >380ms = Dash (—)';
+    floatingBarStatus.textContent = currentMode === 'Fin2Morse' ? 'Fin2Morse Ready' : 'Listening for blinks...';
+    floatingBarSub.textContent = 'Hold <380ms = Dot (•) | Hold >380ms = Dash (—)';
+    if (finTapStatus) finTapStatus.textContent = 'Touch or Click to input Morse';
+    if (finTapSub) finTapSub.textContent = 'Release <380ms = • Dot | Hold >380ms = — Dash';
     showToast('Buffer cleared');
   });
 
@@ -427,7 +650,8 @@ function setupEventListeners() {
     btnModeFinger?.classList.add('active');
     btnModeBlink?.classList.remove('active');
     floatingBarStatus.textContent = 'Fin2Morse Active (Finger Tap)';
-    floatingBarSub.textContent = 'Tap Spacebar or screen (Hold <380ms = • Dot, Hold >380ms = — Dash)';
+    floatingBarSub.textContent = 'Tap pad, Spacebar, or screen (Hold <380ms = • Dot, Hold >380ms = — Dash)';
+    updateDisplay();
     showToast('🖐️ Switched to Fin2Morse (Finger / Tactile Mode)');
   });
 
@@ -437,6 +661,7 @@ function setupEventListeners() {
     btnModeFinger?.classList.remove('active');
     floatingBarStatus.textContent = 'Blink2Morse Active';
     floatingBarSub.textContent = 'Tracking eye movements (Short=Dot, Long=Dash)';
+    updateDisplay();
     showToast('👁️ Switched to Blink2Morse (Eye Tracking Mode)');
   });
 
@@ -486,16 +711,16 @@ function setupEventListeners() {
       return;
     }
     if (e.code === 'KeyD' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
+      cancelPendingFinalizeTimers();
       appendSymbol('.');
     } else if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
+      cancelPendingFinalizeTimers();
       appendSymbol('-');
     } else if (e.code === 'Space' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
       e.preventDefault();
       if (currentMode === 'Fin2Morse') {
-        if (!e.repeat && fingerTapStartTime === 0) {
-          fingerTapStartTime = performance.now();
-          floatingBarStatus.textContent = 'Fin2Morse: Pressing...';
-          pulseFloatingIcon();
+        if (!e.repeat && !isFingerHolding) {
+          handleFingerTapDown();
         }
       } else {
         finalizeCharacter();
@@ -504,17 +729,9 @@ function setupEventListeners() {
   });
 
   window.addEventListener('keyup', (e) => {
-    if (e.code === 'Space' && currentMode === 'Fin2Morse' && fingerTapStartTime > 0) {
+    if (e.code === 'Space' && currentMode === 'Fin2Morse' && isFingerHolding) {
       e.preventDefault();
-      const duration = performance.now() - fingerTapStartTime;
-      fingerTapStartTime = 0;
-      if (duration < 380) {
-        appendSymbol('.');
-        flashCameraStatus('DOT (•)');
-      } else {
-        appendSymbol('-');
-        flashCameraStatus('DASH (—)');
-      }
+      handleFingerTapUp();
     }
   });
 }

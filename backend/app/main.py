@@ -135,6 +135,16 @@ async def ws(websocket: WebSocket) -> None:
                         "symbols": session.symbols,
                         "text": session.text,
                     }
+                elif isinstance(parsed, dict) and parsed.get("type") in ("finalize", "letter_gap"):
+                    char = session.decoder.finish_letter()
+                    reply = {
+                        "face": True,
+                        "score": None,
+                        "eyes_closed": False,
+                        "events": ["letter_gap"] if char else [],
+                        "symbols": session.symbols,
+                        "text": session.text,
+                    }
                 elif isinstance(parsed, dict) and parsed.get("type") == "frame" and isinstance(parsed.get("image"), str):
                     img_str = parsed["image"]
                     if "," in img_str:
