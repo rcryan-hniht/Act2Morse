@@ -10,6 +10,10 @@ Uses the ``eyeBlinkLeft`` / ``eyeBlinkRight`` blendshape scores, which run
 
 from __future__ import annotations
 
+import logging
+import os
+import urllib.request
+
 import numpy as np
 
 import cv2
@@ -17,11 +21,36 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
+logger = logging.getLogger(__name__)
+
+MODEL_DOWNLOAD_URL = (
+    "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
+    "face_landmarker/float16/latest/face_landmarker.task"
+)
+
+
+def ensure_model(model_path: str) -> str:
+    """Ensure the MediaPipe face_landmarker model exists on disk.
+
+    If missing, downloads it automatically from Google Cloud Storage.
+    """
+    if os.path.isfile(model_path):
+        return model_path
+
+    os.makedirs(os.path.dirname(os.path.abspath(model_path)), exist_ok=True)
+    temp_path = f"{model_path}.tmp"
+    logger.info("Downloading face_landmarker.task to %s...", model_path)
+    urllib.request.urlretrieve(MODEL_DOWNLOAD_URL, temp_path)
+    os.replace(temp_path, model_path)
+    logger.info("Successfully downloaded face_landmarker.task to %s", model_path)
+    return model_path
+
 
 class EyeDetector:
     """Extracts an eye-closure score (0 = open, 1 = closed) from a JPEG frame."""
 
     def __init__(self, model_path: str) -> None:
+        ensure_model(model_path)
         options = vision.FaceLandmarkerOptions(
             base_options=python.BaseOptions(model_asset_path=model_path),
             running_mode=vision.RunningMode.VIDEO,

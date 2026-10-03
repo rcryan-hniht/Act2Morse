@@ -243,7 +243,7 @@ cameraController.onBlink(handleBlinkEvent);
  */
 wsBridge.onStatusChange((status: ConnectionStatus) => {
   if (status === 'connected') {
-    showToast('Connected to Python backend (localhost:8000)');
+    showToast('Connected to Python backend');
   }
 });
 

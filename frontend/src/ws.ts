@@ -16,6 +16,14 @@ export interface BackendMessage {
   message?: string;
 }
 
+function resolveDefaultWsUrl(): string {
+  const envUrl = import.meta.env.VITE_WS_URL;
+  if (typeof envUrl === 'string' && envUrl.trim().length > 0) {
+    return envUrl.trim();
+  }
+  return 'ws://localhost:8000/ws';
+}
+
 export class BlinkWebSocketBridge {
   private url: string;
   private ws: WebSocket | null = null;
@@ -25,8 +33,8 @@ export class BlinkWebSocketBridge {
   private messageListeners: Array<(msg: BackendMessage) => void> = [];
   private currentStatus: ConnectionStatus = 'disconnected';
 
-  constructor(url: string = 'ws://localhost:8000/ws') {
-    this.url = url;
+  constructor(url?: string) {
+    this.url = url || resolveDefaultWsUrl();
   }
 
   public connect() {

@@ -12,16 +12,27 @@ import asyncio
 import json
 import time
 
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import load_settings
-from app.detector import EyeDetector
+from app.detector import EyeDetector, ensure_model
 from app.session import MorseSession
 
-app = FastAPI(title="Blink2Morse backend")
-
 settings = load_settings()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Ensure model is available on startup
+    await asyncio.to_thread(ensure_model, settings.model_path)
+    yield
+
+
+app = FastAPI(title="Blink2Morse backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
