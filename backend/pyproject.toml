@@ -1,0 +1,21 @@
+[project]
+name = "blink2morse-backend"
+version = "0.1.0"
+description = "Eye blink to Morse code backend: MediaPipe blink detection and Morse decoding over WebSocket."
+readme = "../README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "mediapipe>=1.0",
+    "opencv-contrib-python>=4.10",
+    "numpy>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
