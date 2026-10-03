@@ -379,6 +379,36 @@ export class CameraController {
   }
 
   /**
+   * Transforms normalized MediaPipe video coordinates [0..1, 0..1]
+   * to canvas coordinates matching CSS `object-fit: cover; object-position: center; transform: scaleX(-1)`.
+   */
+  public videoToCanvasCoord(
+    normX: number,
+    normY: number,
+    targetW: number,
+    targetH: number
+  ): { x: number; y: number } {
+    const vw = this.videoEl?.videoWidth || 640;
+    const vh = this.videoEl?.videoHeight || 480;
+
+    // Scale factor matching CSS `object-fit: cover`
+    const scale = Math.max(targetW / vw, targetH / vh);
+    const renderedW = vw * scale;
+    const renderedH = vh * scale;
+
+    // Centered offsets (negative if dimension overflow is cropped by container)
+    const offsetX = (targetW - renderedW) / 2;
+    const offsetY = (targetH - renderedH) / 2;
+
+    // Mirrored selfie view (matching video CSS `transform: scaleX(-1)`)
+    const mirroredX = 1 - normX;
+    const x = offsetX + mirroredX * renderedW;
+    const y = offsetY + normY * renderedH;
+
+    return { x, y };
+  }
+
+  /**
    * Renders Hand Model Results from hand_gesture.task:
    *  - Đốt ngón tay (skeletal joints/bones): MÀU TRẮNG (#FFFFFF)
    *  - Điểm từng ngón (landmark points/joints): MÀU CYAN (#00FFFF)
@@ -418,15 +448,12 @@ export class CameraController {
         const p1 = landmarks[startIdx];
         const p2 = landmarks[endIdx];
 
-        // Mirrored selfie view: x is inverted
-        const x1 = (1 - p1.x) * targetW;
-        const y1 = p1.y * targetH;
-        const x2 = (1 - p2.x) * targetW;
-        const y2 = p2.y * targetH;
+        const pt1 = this.videoToCanvasCoord(p1.x, p1.y, targetW, targetH);
+        const pt2 = this.videoToCanvasCoord(p2.x, p2.y, targetW, targetH);
 
         ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
+        ctx.moveTo(pt1.x, pt1.y);
+        ctx.lineTo(pt2.x, pt2.y);
         ctx.stroke();
       }
 
@@ -435,31 +462,30 @@ export class CameraController {
       // 2. RENDER ĐIỂM TỪNG NGÓN MÀU CYAN (#00FFFF)
       for (let i = 0; i < landmarks.length; i++) {
         const p = landmarks[i];
-        const px = (1 - p.x) * targetW;
-        const py = p.y * targetH;
+        const pt = this.videoToCanvasCoord(p.x, p.y, targetW, targetH);
 
         const isTip = (i === 4 || i === 8 || i === 12 || i === 16 || i === 20);
-        const radius = isTip ? Math.round(6 * dpr) : Math.round(4 * dpr);
+        const radius = isTip ? Math.round(6.5 * dpr) : Math.round(4 * dpr);
 
         // Vibrant Cyan Joint
         ctx.fillStyle = '#00FFFF';
         ctx.beginPath();
-        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
         ctx.fill();
 
         // Dark Cyan Rim
         ctx.strokeStyle = '#0891B2';
         ctx.lineWidth = Math.round(1.5 * dpr);
         ctx.beginPath();
-        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
         ctx.stroke();
 
         // Glowing outer halo for tips
         if (isTip) {
-          ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
-          ctx.lineWidth = Math.round(1 * dpr);
+          ctx.strokeStyle = 'rgba(0, 255, 255, 0.55)';
+          ctx.lineWidth = Math.round(1.2 * dpr);
           ctx.beginPath();
-          ctx.arc(px, py, radius + Math.round(3.5 * dpr), 0, Math.PI * 2);
+          ctx.arc(pt.x, pt.y, radius + Math.round(3.5 * dpr), 0, Math.PI * 2);
           ctx.stroke();
         }
       }
@@ -471,8 +497,10 @@ export class CameraController {
       const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
 
       const isPinching = pinchDist < 0.082;
-      const midX = ((1 - thumbTip.x) + (1 - indexTip.x)) / 2 * targetW;
-      const midY = (thumbTip.y + indexTip.y) / 2 * targetH;
+      const ptThumb = this.videoToCanvasCoord(thumbTip.x, thumbTip.y, targetW, targetH);
+      const ptIndex = this.videoToCanvasCoord(indexTip.x, indexTip.y, targetW, targetH);
+      const midX = (ptThumb.x + ptIndex.x) / 2;
+      const midY = (ptThumb.y + ptIndex.y) / 2;
 
       if (isPinching) {
         if (!this.isHandTapping) {
@@ -516,8 +544,9 @@ export class CameraController {
 
       // 4. Gesture Name Chip above Hand
       const wrist = landmarks[0];
-      const wx = (1 - wrist.x) * targetW;
-      const wy = Math.max(Math.round(25 * dpr), wrist.y * targetH - Math.round(25 * dpr));
+      const ptWrist = this.videoToCanvasCoord(wrist.x, wrist.y, targetW, targetH);
+      const wx = ptWrist.x;
+      const wy = Math.max(Math.round(25 * dpr), ptWrist.y - Math.round(25 * dpr));
 
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
       ctx.beginPath();
@@ -618,8 +647,9 @@ export class CameraController {
         this.isHandDetected = true;
         this.handConfidence = 0.85;
 
-        const tipX = (topX / offW) * targetW;
-        const tipY = (topY / offH) * targetH;
+        const pFallback = this.videoToCanvasCoord(topX / offW, topY / offH, targetW, targetH);
+        const tipX = pFallback.x;
+        const tipY = pFallback.y;
 
         ctx.save();
         // White bone connector to base
