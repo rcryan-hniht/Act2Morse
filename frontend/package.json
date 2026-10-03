@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "prepare-wasm": "mkdir -p public/wasm && cp -r node_modules/@mediapipe/tasks-vision/wasm/* public/wasm/",
+    "dev": "pnpm run prepare-wasm && vite",
+    "build": "pnpm run prepare-wasm && tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
