@@ -445,14 +445,12 @@ function setupEventListeners() {
     morseFlipInner?.classList.add('is-flipped');
     navLinkDocs?.classList.add('active');
     morseFlipContainer?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    showToast('📖 Flipped to Mode Docs (Fin & Blink)');
   };
 
   const flipToChart = () => {
     morseFlipInner?.classList.remove('is-flipped');
     navLinkDocs?.classList.remove('active');
     morseFlipContainer?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    showToast('🔢 Flipped back to Morse Alphabet Chart');
   };
 
   const toggleFlip = () => {
