@@ -31,11 +31,14 @@ const btnSoundToggle = document.getElementById('btnSoundToggle') as HTMLButtonEl
 
 // Navbar DOM
 const navBtnAction = document.getElementById('navBtnAction') as HTMLButtonElement | null;
-const btnModeBlink = document.getElementById('btnModeBlink') as HTMLButtonElement | null;
 const btnModeFinger = document.getElementById('btnModeFinger') as HTMLButtonElement | null;
-const navLinkChart = document.getElementById('navLinkChart') as HTMLAnchorElement | null;
+const btnModeBlink = document.getElementById('btnModeBlink') as HTMLButtonElement | null;
+const navLinkDocs = document.getElementById('navLinkDocs') as HTMLElement | null;
+const docsModal = document.getElementById('docsModal') as HTMLElement | null;
+const docsModalClose = document.getElementById('docsModalClose') as HTMLButtonElement | null;
+const docsBtnJumpChart = document.getElementById('docsBtnJumpChart') as HTMLButtonElement | null;
 
-let currentMode: 'Blink2Morse' | 'Fin2Morse' = 'Blink2Morse';
+let currentMode: 'Fin2Morse' | 'Blink2Morse' = 'Fin2Morse';
 let fingerTapStartTime = 0;
 
 // Camera DOM
@@ -417,16 +420,7 @@ function setupEventListeners() {
     navBtnAction.addEventListener('click', toggleCamera);
   }
 
-  // Mode Switcher: Blink2Morse vs Fin2Morse
-  btnModeBlink?.addEventListener('click', () => {
-    currentMode = 'Blink2Morse';
-    btnModeBlink.classList.add('active');
-    btnModeFinger?.classList.remove('active');
-    floatingBarStatus.textContent = 'Blink2Morse Active';
-    floatingBarSub.textContent = 'Tracking eye movements (Short=Dot, Long=Dash)';
-    showToast('👁️ Switched to Blink2Morse (Eye Tracking Mode)');
-  });
-
+  // Mode Switcher: Fin2Morse vs Blink2Morse
   btnModeFinger?.addEventListener('click', () => {
     currentMode = 'Fin2Morse';
     btnModeFinger?.classList.add('active');
@@ -436,8 +430,35 @@ function setupEventListeners() {
     showToast('🖐️ Switched to Fin2Morse (Finger / Tactile Mode)');
   });
 
-  navLinkChart?.addEventListener('click', (e) => {
+  btnModeBlink?.addEventListener('click', () => {
+    currentMode = 'Blink2Morse';
+    btnModeBlink.classList.add('active');
+    btnModeFinger?.classList.remove('active');
+    floatingBarStatus.textContent = 'Blink2Morse Active';
+    floatingBarSub.textContent = 'Tracking eye movements (Short=Dot, Long=Dash)';
+    showToast('👁️ Switched to Blink2Morse (Eye Tracking Mode)');
+  });
+
+  // Docs Modal handlers
+  const openDocs = () => {
+    docsModal?.classList.add('open');
+  };
+  const closeDocs = () => {
+    docsModal?.classList.remove('open');
+  };
+
+  navLinkDocs?.addEventListener('click', (e) => {
     e.preventDefault();
+    openDocs();
+  });
+
+  docsModalClose?.addEventListener('click', closeDocs);
+  docsModal?.addEventListener('click', (e) => {
+    if (e.target === docsModal) closeDocs();
+  });
+
+  docsBtnJumpChart?.addEventListener('click', () => {
+    closeDocs();
     morseChartPanel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     morseChartPanel?.classList.add('pulse-highlight');
     setTimeout(() => morseChartPanel?.classList.remove('pulse-highlight'), 600);
@@ -454,6 +475,10 @@ function setupEventListeners() {
 
   // Keyboard accessibility and Fin2Morse tactile input
   window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && docsModal?.classList.contains('open')) {
+      closeDocs();
+      return;
+    }
     if (e.code === 'KeyD' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
       appendSymbol('.');
     } else if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {

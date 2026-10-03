@@ -49,18 +49,18 @@ const MORSE_MAP: Record<string, string> = {
             <span class="brand-badge">ASSISTIVE AI</span>
           </a>
 
-          <!-- Center: Mode Selector (Blink2Morse vs Fin2Morse) & Links -->
+          <!-- Center: Mode Selector (Fin2Morse, Blink2Morse, Docs) -->
           <div class="nav-modes">
-            <button class="nav-mode-btn active" id="btnModeBlink" type="button" title="Eye Blink Tracking">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
-              <span>Blink2Morse</span>
-            </button>
-            <button class="nav-mode-btn" id="btnModeFinger" type="button" title="Finger Tap & Gesture Morse">
+            <button class="nav-mode-btn active" id="btnModeFinger" type="button" title="Finger Tap & Gesture Morse">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
               <span>Fin2Morse</span>
               <span class="mode-tag-new">TAP</span>
             </button>
-            <a href="#morseChartPanel" class="nav-link-chart" id="navLinkChart">Morse Chart</a>
+            <button class="nav-mode-btn" id="btnModeBlink" type="button" title="Eye Blink Tracking">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+              <span>Blink2Morse</span>
+            </button>
+            <button class="nav-link-chart nav-link-docs" id="navLinkDocs" type="button" title="Documentation & User Guide">Docs</button>
           </div>
 
           <!-- Right: Camera Action Button -->
@@ -190,8 +190,8 @@ const MORSE_MAP: Record<string, string> = {
                   </svg>
                 </div>
                 <div class="floating-bar-text">
-                  <span class="floating-bar-title" id="floatingBarStatus">Listening for blinks...</span>
-                  <span class="floating-bar-desc" id="floatingBarSub">Short &lt;380ms = Dot (•) | Long &gt;380ms = Dash (—)</span>
+                  <span class="floating-bar-title" id="floatingBarStatus">Fin2Morse Active (Finger Tap)</span>
+                  <span class="floating-bar-desc" id="floatingBarSub">Tap Spacebar or screen (Hold &lt;380ms = • Dot, Hold &gt;380ms = — Dash)</span>
                 </div>
               </div>
               <!-- Up Arrow button on the right -->
@@ -226,7 +226,87 @@ const MORSE_MAP: Record<string, string> = {
         </div>
       </section>
 
+      <!-- Documentation Modal -->
+      <div class="docs-modal-backdrop" id="docsModal" role="dialog" aria-modal="true" aria-labelledby="docsModalTitle">
+        <div class="docs-modal-card">
+          <div class="docs-modal-header">
+            <div class="docs-modal-brand">
+              <div class="brand-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+                  <path d="M6 6h10"/>
+                  <path d="M6 10h10"/>
+                </svg>
+              </div>
+              <div>
+                <h2 class="docs-modal-title" id="docsModalTitle">Act2Morse Docs & Guide</h2>
+                <span class="docs-modal-subtitle">Assistive communication system</span>
+              </div>
+            </div>
+            <button class="docs-modal-close" id="docsModalClose" type="button" aria-label="Close Documentation">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
 
+          <div class="docs-modal-body">
+            <div class="docs-section">
+              <div class="docs-section-tag">OVERVIEW</div>
+              <h3>Assistive Technology for Impaired Individuals</h3>
+              <p>
+                Act2Morse bridges the communication gap for deaf-mute, non-verbal, and ALS/motor-impaired individuals by converting micro-gestures and eye blinks into live Morse code and synthesized speech.
+              </p>
+            </div>
+
+            <div class="docs-grid">
+              <div class="docs-card">
+                <div class="docs-card-header">
+                  <span class="docs-badge-accent">MODE 1</span>
+                  <h4>Fin2Morse (Tactile Tap)</h4>
+                </div>
+                <p>Designed for individuals with subtle finger or hand mobility.</p>
+                <ul class="docs-list">
+                  <li><strong>Screen Tap or Spacebar:</strong> Press & hold anywhere on screen or use spacebar.</li>
+                  <li><strong>Dot (&bull;):</strong> Short hold under 380ms.</li>
+                  <li><strong>Dash (&mdash;):</strong> Hold longer than 380ms.</li>
+                  <li><strong>Hotkeys:</strong> Press <code>D</code> for Dot, <code>F</code> for Dash, <code>Space</code> to finalize letter.</li>
+                </ul>
+              </div>
+
+              <div class="docs-card">
+                <div class="docs-card-header">
+                  <span class="docs-badge-ocular">MODE 2</span>
+                  <h4>Blink2Morse (Eye Tracking)</h4>
+                </div>
+                <p>Hands-free ocular mode for individuals with limited limb movement.</p>
+                <ul class="docs-list">
+                  <li><strong>Start Camera:</strong> Click <em>Start Camera</em> to activate browser/Python MediaPipe tracking.</li>
+                  <li><strong>Natural Blinks:</strong> Brief eye flutters under 80ms are filtered out as noise.</li>
+                  <li><strong>Conscious Blink:</strong> 80–600ms produces a <strong>Dot</strong>; &gt;600ms produces a <strong>Dash</strong>.</li>
+                  <li><strong>Auto-decode:</strong> Pausing 1.2s finalizes the letter; 2.5s adds a word space.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="docs-section">
+              <div class="docs-section-tag">RESOURCES</div>
+              <div class="docs-links-row">
+                <a href="https://github.com/rcryan-hniht/Act2Morse#readme" target="_blank" rel="noopener noreferrer" class="docs-link-btn">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                  </svg>
+                  <span>GitHub Repository Docs</span>
+                </a>
+                <button class="docs-link-btn" id="docsBtnJumpChart" type="button">
+                  <span>View Morse Alphabet Chart &rarr;</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
 
     <!-- Toast Notification -->
