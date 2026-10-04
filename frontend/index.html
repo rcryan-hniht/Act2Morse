@@ -56,11 +56,13 @@ const MORSE_MAP: Record<string, string> = {
               <span>Fin2Morse</span>
               <span class="mode-tag-new">TAP</span>
             </button>
-            <button class="nav-mode-btn" id="btnModeBlink" type="button" title="Eye Blink Tracking">
+            <button class="nav-mode-btn" id="btnModeBlink" type="button" title="Eye Blink Tracking (Beta)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
               <span>Blink2Morse</span>
+              <span class="mode-tag-beta">BETA</span>
             </button>
             <button class="nav-link-chart nav-link-docs" id="navLinkDocs" type="button" title="Documentation & User Guide">Docs</button>
+            <button class="nav-link-chart" id="navLinkAbout" type="button" title="Giới thiệu Act2Morse">Intro</button>
           </div>
 
           <!-- Right: Camera Action Button -->
@@ -86,7 +88,7 @@ const MORSE_MAP: Record<string, string> = {
 
           <!-- Hero Subtitle (Mono or sans, 14px, wide line-height, centered) -->
           <p class="hero-subtitle">
-            An accessible communication interface transforming eye blinks (<strong>Blink2Morse</strong>) and finger micro-taps (<strong>Fin2Morse</strong>) into live Morse code and natural speech. Designed to empower deaf-mute, non-verbal, and motor-impaired individuals.
+            An accessible communication interface transforming eye blinks (<strong>Blink2Morse</strong> <span class="mode-tag-beta">BETA</span>) and finger micro-taps (<strong>Fin2Morse</strong>) into live Morse code and natural speech. Designed to empower deaf-mute, non-verbal, and motor-impaired individuals.
           </p>
 
           <!-- Card: Morse Console -->
@@ -315,11 +317,11 @@ const MORSE_MAP: Record<string, string> = {
                         <div class="mode-card-icon blink-icon">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
                         </div>
-                        <span class="mode-card-name">Blink Mode</span>
+                        <span class="mode-card-name">Blink Mode <span class="mode-tag-beta">BETA</span></span>
                       </div>
-                      <span class="mode-card-badge blink-badge">OCULAR</span>
+                      <span class="mode-card-badge blink-badge">BETA</span>
                     </div>
-                    <p class="mode-card-desc">Hands-free tracking for speech &amp; motor impairment.</p>
+                    <p class="mode-card-desc">Experimental hands-free tracking for speech &amp; motor impairment.</p>
                     <div class="mode-card-rules">
                       <div class="rule-item">
                         <span class="rule-bullet dot-bullet">•</span>
@@ -350,6 +352,105 @@ const MORSE_MAP: Record<string, string> = {
           </div>
         </div>
       </section>
+    </main>
+
+    <!-- Floating Welcome Dialog / Modal (Bảng nổi giới thiệu khi vào web) -->
+    <div class="welcome-overlay is-open" id="welcomeOverlay" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+      <div class="welcome-backdrop" id="welcomeBackdrop"></div>
+      <div class="welcome-card" id="welcomeCard">
+        <!-- Close button in top-right -->
+        <button class="welcome-close-btn" id="btnWelcomeClose" type="button" aria-label="Close dialog">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+
+        <!-- Subtle inner code watermark background -->
+        <div class="welcome-watermark" aria-hidden="true">
+/* Act2Morse Core Assistive Engine
+ * Tracking eye blinks (Blink2Morse) & finger taps (Fin2Morse) to Morse stream
+ * Designed for non-verbal, deaf-mute and motor-disabled individuals */
+interface ActProfile {
+  readonly dashThresholdMs: 1200;
+  readonly mode: 'Blink2Morse' | 'Fin2Morse';
+}
+const MORSE_MAP: Record&lt;string, string&gt; = {
+  A: ".-",   B: "-...", C: "-.-.", D: "-..",  E: ".",
+  F: "..-.", G: "--.",  H: "....", I: "..",   J: ".---",
+};
+        </div>
+
+        <div class="welcome-content">
+          <!-- Tag / Eyebrow -->
+          <div class="welcome-pill-tag">
+            <span class="pulse-dot"></span>
+            <span>ASSISTIVE TECHNOLOGY &bull; FOR SPEECH &amp; HEARING IMPAIRMENTS</span>
+          </div>
+
+          <!-- Headline -->
+          <h2 class="welcome-title" id="welcomeTitle">
+            Convert micro actions into <em>living words.</em>
+          </h2>
+
+          <!-- Subtitle / Mission -->
+          <p class="welcome-subtitle">
+            An accessible communication interface transforming eye blinks (<strong class="mode-highlight">Blink2Morse</strong> <span class="mode-tag-beta">BETA</span>) and finger micro-taps (<strong class="mode-highlight">Fin2Morse</strong>) into live Morse code and natural speech. Designed to empower deaf-mute, non-verbal, and motor-impaired individuals.
+          </p>
+
+          <!-- Two-column Mode Cards -->
+          <div class="welcome-modes-grid">
+            <div class="welcome-mode-box welcome-box-fin">
+              <div class="welcome-box-header">
+                <div class="welcome-box-icon fin-icon-accent">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+                </div>
+                <div class="welcome-box-title-wrap">
+                  <span class="welcome-box-title">Fin2Morse</span>
+                  <span class="welcome-box-badge badge-primary">ACTIVE &bull; 60 FPS</span>
+                </div>
+              </div>
+              <p class="welcome-box-desc">Chạm micro-tap hoặc giơ tay trước camera: theo dõi 21 khớp ngón (xương trắng, khớp cyan), nhận diện nắm tay để cách chữ, vẫy ngón cái để xóa.</p>
+              <div class="welcome-box-specs">
+                <span class="spec-chip">&lt;380ms: Dot (•)</span>
+                <span class="spec-chip">&gt;380ms: Dash (—)</span>
+                <span class="spec-chip">✊ Fist: Space</span>
+              </div>
+            </div>
+
+            <div class="welcome-mode-box welcome-box-blink">
+              <div class="welcome-box-header">
+                <div class="welcome-box-icon blink-icon-accent">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                </div>
+                <div class="welcome-box-title-wrap">
+                  <span class="welcome-box-title">Blink2Morse</span>
+                  <span class="mode-tag-beta">BETA</span>
+                </div>
+              </div>
+              <p class="welcome-box-desc">Giao tiếp rảnh tay bằng chuyển động mắt: phân tích tỉ lệ mí mắt (EAR) và mô hình AI để chuyển nhịp chớp thành ký tự Morse.</p>
+              <div class="welcome-box-specs">
+                <span class="spec-chip">Chớp nhanh: Dot (•)</span>
+                <span class="spec-chip">Nhắm lâu: Dash (—)</span>
+                <span class="spec-chip">Khoảng nghỉ: Cách chữ</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Footer Actions -->
+          <div class="welcome-footer">
+            <button class="welcome-btn-start" id="btnWelcomeStart" type="button">
+              <span>Bắt đầu trải nghiệm</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </button>
+            <button class="welcome-btn-learn" id="btnWelcomeDocs" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              <span>Xem hướng dẫn cử chỉ</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Toast Notification -->
     <div class="toast-notice" id="toastNotice">

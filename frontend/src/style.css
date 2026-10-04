@@ -190,6 +190,27 @@ body {
   font-weight: 600;
 }
 
+.mode-tag-beta {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #D97706;
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  padding: 1px 5px;
+  border-radius: 6px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.nav-pill .mode-tag-beta {
+  color: #FBBF24;
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
 .nav-link-chart,
 .nav-link-docs {
   font-size: 12px;
@@ -1310,5 +1331,335 @@ body {
   .morse-chart-panel,
   .morse-flip-container {
     max-height: 440px;
+  }
+}
+
+/* ==========================================================================
+   Floating Welcome Modal / Dialog (Bảng nổi khi vừa vào web)
+   ========================================================================== */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.28s ease, visibility 0.28s ease;
+}
+
+.welcome-overlay.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.welcome-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(12, 12, 14, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.welcome-card {
+  position: relative;
+  width: 100%;
+  max-width: 660px;
+  background: #FFFFFF;
+  border-radius: 28px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 25px 70px -12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+  padding: 40px 36px 32px 36px;
+  overflow: hidden;
+  transform: scale(0.94) translateY(12px);
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 2;
+}
+
+.welcome-overlay.is-open .welcome-card {
+  transform: scale(1) translateY(0);
+}
+
+.welcome-watermark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.8;
+  color: #000000;
+  opacity: 0.038;
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+  padding: 24px;
+  white-space: pre-wrap;
+  z-index: 1;
+}
+
+.welcome-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: #555555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  z-index: 10;
+}
+
+.welcome-close-btn:hover {
+  background: #111111;
+  color: #FFFFFF;
+  transform: scale(1.05);
+}
+
+.welcome-content {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.welcome-pill-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  color: #4B5563;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  margin-bottom: 18px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.welcome-pill-tag .pulse-dot {
+  width: 7px;
+  height: 7px;
+  background-color: #10B981;
+  border-radius: 50%;
+  animation: pulse 1.8s infinite;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.welcome-title {
+  font-family: var(--font-serif);
+  font-size: 46px;
+  line-height: 1.12;
+  font-weight: 400;
+  color: #111111;
+  letter-spacing: -0.02em;
+  margin-bottom: 14px;
+}
+
+.welcome-title em {
+  font-style: italic;
+}
+
+.welcome-subtitle {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-muted);
+  max-width: 540px;
+  margin: 0 auto 24px auto;
+}
+
+.welcome-subtitle strong.mode-highlight {
+  color: #111111;
+  font-weight: 600;
+}
+
+.welcome-modes-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  width: 100%;
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.welcome-mode-box {
+  background: #F9F9F8;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 18px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.welcome-mode-box:hover {
+  background: #FFFFFF;
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04);
+}
+
+.welcome-box-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.welcome-box-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fin-icon-accent {
+  background: #111111;
+  color: #C9B8FF;
+}
+
+.blink-icon-accent {
+  background: #FEF3C7;
+  color: #D97706;
+}
+
+.welcome-box-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.welcome-box-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111111;
+}
+
+.welcome-box-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+}
+
+.badge-primary {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+}
+
+.welcome-box-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #6B7280;
+}
+
+.welcome-box-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.spec-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.04);
+  color: #374151;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.welcome-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.welcome-btn-start {
+  background: #111111;
+  color: #FFFFFF;
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 12px 28px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.18s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+
+.welcome-btn-start:hover {
+  background: #262626;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.welcome-btn-learn {
+  background: transparent;
+  color: #4B5563;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-pill);
+  padding: 11px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+}
+
+.welcome-btn-learn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #111111;
+  border-color: rgba(0, 0, 0, 0.24);
+}
+
+@media (max-width: 640px) {
+  .welcome-card {
+    padding: 28px 20px 24px 20px;
+    border-radius: 20px;
+  }
+  .welcome-title {
+    font-size: 32px;
+  }
+  .welcome-modes-grid {
+    grid-template-columns: 1fr;
+  }
+  .welcome-footer {
+    flex-direction: column;
+    width: 100%;
+  }
+  .welcome-btn-start,
+  .welcome-btn-learn {
+    width: 100%;
+    justify-content: center;
   }
 }

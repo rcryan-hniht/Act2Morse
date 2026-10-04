@@ -85,6 +85,14 @@ const morseFlipInner = document.getElementById('morseFlipInner') as HTMLElement 
 const btnFlipToDocs = document.getElementById('btnFlipToDocs') as HTMLButtonElement | null;
 const btnFlipToChart = document.getElementById('btnFlipToChart') as HTMLButtonElement | null;
 
+// Welcome Modal DOM (Bảng nổi giới thiệu)
+const welcomeOverlay = document.getElementById('welcomeOverlay') as HTMLDivElement | null;
+const btnWelcomeClose = document.getElementById('btnWelcomeClose') as HTMLButtonElement | null;
+const btnWelcomeStart = document.getElementById('btnWelcomeStart') as HTMLButtonElement | null;
+const btnWelcomeDocs = document.getElementById('btnWelcomeDocs') as HTMLButtonElement | null;
+const welcomeBackdrop = document.getElementById('welcomeBackdrop') as HTMLDivElement | null;
+const navLinkAbout = document.getElementById('navLinkAbout') as HTMLButtonElement | null;
+
 // Camera DOM
 const btnToggleCamera = document.getElementById('btnToggleCamera') as HTMLButtonElement;
 const btnToggleCamText = document.getElementById('btnToggleCamText') as HTMLSpanElement;
@@ -259,8 +267,8 @@ async function toggleCamera() {
         cameraController.setMode('Blink2Morse');
         wsBridge.sendMode('Blink2Morse');
         camStatusDot.style.background = '#10B981';
-        camStatusText.textContent = 'EYE TRACKING ACTIVE';
-        showToast('👁️ Blink camera activated (Eye Tracking)');
+        camStatusText.textContent = 'EYE TRACKING [BETA] ACTIVE';
+        showToast('👁️ Blink camera activated (Beta - Eye Tracking)');
       }
     } else {
       btnToggleCamText.textContent = 'Launch Camera';
@@ -331,7 +339,7 @@ cameraController.onMetrics((metrics: CameraMetrics) => {
     }
   } else {
     if (!wsBridge.isConnected()) {
-      camStatusText.textContent = `${metrics.isBlinking ? 'BLINK' : 'TRACKING'} • ${metrics.fps} FPS`;
+      camStatusText.textContent = `${metrics.isBlinking ? 'BLINK [BETA]' : 'EYE TRACKING [BETA]'} • ${metrics.fps} FPS`;
     }
   }
 });
@@ -814,14 +822,14 @@ function setupEventListeners() {
     wsBridge.sendMode('Blink2Morse');
     btnModeBlink.classList.add('active');
     btnModeFinger?.classList.remove('active');
-    floatingBarStatus.textContent = 'Blink2Morse Active (Eye Tracking)';
+    floatingBarStatus.textContent = 'Blink2Morse (Beta) Active';
     floatingBarSub.textContent = 'Tracking eye movements (Short=Dot, Long=Dash)';
     if (isCameraActive) {
       camStatusDot.style.background = '#10B981';
-      camStatusText.textContent = 'EYE TRACKING';
+      camStatusText.textContent = 'EYE TRACKING [BETA]';
     }
     updateDisplay();
-    showToast('👁️ Switched to Blink2Morse (Eye Tracking Mode)');
+    showToast('👁️ Switched to Blink2Morse (Beta - Eye Tracking Mode)');
   });
 
   // 3D Flip Card: Docs (Fin & Blink mode cards) vs Morse Alphabet Chart
@@ -863,11 +871,44 @@ function setupEventListeners() {
     showToast('Morse Chart is beside the camera');
   });
 
+  // Floating Welcome Modal (Bảng nổi giới thiệu khi vào web)
+  const openWelcomeModal = () => {
+    if (welcomeOverlay) {
+      welcomeOverlay.classList.add('is-open');
+      document.body.style.overflow = 'hidden';
+    }
+  };
+
+  const closeWelcomeModal = () => {
+    if (welcomeOverlay) {
+      welcomeOverlay.classList.remove('is-open');
+      document.body.style.overflow = '';
+    }
+  };
+
+  btnWelcomeClose?.addEventListener('click', closeWelcomeModal);
+  welcomeBackdrop?.addEventListener('click', closeWelcomeModal);
+  btnWelcomeStart?.addEventListener('click', closeWelcomeModal);
+  btnWelcomeDocs?.addEventListener('click', () => {
+    closeWelcomeModal();
+    flipToDocs();
+  });
+  navLinkAbout?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openWelcomeModal();
+  });
+
   // Keyboard accessibility and Fin2Morse tactile input
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && morseFlipInner?.classList.contains('is-flipped')) {
-      flipToChart();
-      return;
+    if (e.key === 'Escape') {
+      if (welcomeOverlay?.classList.contains('is-open')) {
+        closeWelcomeModal();
+        return;
+      }
+      if (morseFlipInner?.classList.contains('is-flipped')) {
+        flipToChart();
+        return;
+      }
     }
     if (e.code === 'KeyD' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT') {
       cancelPendingFinalizeTimers();
@@ -938,4 +979,10 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   buildAlphabetGrid();
   updateDisplay();
+  
+  // Display floating welcome modal on first entry
+  if (welcomeOverlay) {
+    welcomeOverlay.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+  }
 });
