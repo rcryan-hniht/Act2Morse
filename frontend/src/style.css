@@ -789,7 +789,7 @@ body {
 }
 
 .btn-toggle-cam {
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--btn-accent);
   color: #111111;
   border: none;
   border-radius: var(--radius-pill);
@@ -801,12 +801,27 @@ body {
   align-items: center;
   gap: 6px;
   transition: all 0.15s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 14px rgba(201, 184, 255, 0.35);
 }
 
 .btn-toggle-cam:hover {
-  background: #FFFFFF;
+  background: var(--btn-accent-hover);
   transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(201, 184, 255, 0.5);
+}
+
+.btn-toggle-cam:active {
+  transform: scale(0.97);
+}
+
+.btn-toggle-cam.is-active {
+  background: rgba(239, 68, 68, 0.9);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+}
+
+.btn-toggle-cam.is-active:hover {
+  background: #DC2626;
 }
 
 /* Floating bar on hero image */

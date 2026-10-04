@@ -76,7 +76,6 @@ const finTapBadge = document.getElementById('finTapBadge') as HTMLSpanElement | 
 const portraitBox = document.getElementById('portraitBox') as HTMLDivElement | null;
 
 // Navbar DOM
-const navBtnAction = document.getElementById('navBtnAction') as HTMLButtonElement | null;
 const btnModeFinger = document.getElementById('btnModeFinger') as HTMLButtonElement | null;
 const btnModeBlink = document.getElementById('btnModeBlink') as HTMLButtonElement | null;
 const navLinkDocs = document.getElementById('navLinkDocs') as HTMLElement | null;
@@ -255,7 +254,7 @@ async function toggleCamera() {
       webcamCanvas.style.display = 'block';
 
       btnToggleCamText.textContent = 'Stop Camera';
-      if (navBtnAction) navBtnAction.textContent = 'Stop Camera';
+      btnToggleCamera.classList.add('is-active');
 
       if (currentMode === 'Fin2Morse') {
         cameraController.setMode('Fin2Morse');
@@ -272,7 +271,7 @@ async function toggleCamera() {
       }
     } else {
       btnToggleCamText.textContent = 'Launch Camera';
-      if (navBtnAction) navBtnAction.textContent = 'Start Camera';
+      btnToggleCamera.classList.remove('is-active');
       showToast('Camera permission denied or camera unavailable');
     }
   } else {
@@ -283,7 +282,7 @@ async function toggleCamera() {
     heroPortraitImg.style.display = 'block';
 
     btnToggleCamText.textContent = 'Launch Camera';
-    if (navBtnAction) navBtnAction.textContent = 'Start Camera';
+    btnToggleCamera.classList.remove('is-active');
     camStatusDot.style.background = '#6B7280';
     camStatusText.textContent = 'WEBCAM OFF';
     showToast('Camera stopped');
@@ -793,11 +792,8 @@ function setupEventListeners() {
   });
   btnSoundToggle.classList.add('active');
 
-  // Camera toggle buttons
+  // Camera toggle button
   btnToggleCamera.addEventListener('click', toggleCamera);
-  if (navBtnAction) {
-    navBtnAction.addEventListener('click', toggleCamera);
-  }
 
   // Mode Switcher: Fin2Morse vs Blink2Morse
   btnModeFinger?.addEventListener('click', () => {
