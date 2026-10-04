@@ -868,7 +868,7 @@ function setupEventListeners() {
     }
     morseChartPanel?.classList.add('pulse-highlight');
     setTimeout(() => morseChartPanel?.classList.remove('pulse-highlight'), 600);
-    showToast('Morse Chart is beside the camera');
+    showToast('Morse Chart is on the left');
   });
 
   // Floating Welcome Modal (Bảng nổi giới thiệu khi vào web)

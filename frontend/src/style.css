@@ -263,16 +263,18 @@ body {
   position: relative;
   z-index: 5;
   display: grid;
-  grid-template-columns: 0.92fr 1.38fr;
-  gap: 32px;
-  align-items: start;
-  padding: 36px 36px 32px 36px;
+  grid-template-columns: minmax(360px, 420px) minmax(460px, 1fr);
+  gap: 28px;
+  align-items: stretch;
+  padding: 24px 32px 32px 32px;
 }
 
 /* Left Column */
 .hero-left {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 600px;
 }
 
 .hero-pill-tag {
@@ -689,20 +691,20 @@ body {
   text-underline-offset: 2px;
 }
 
-/* Right Column: Portrait Visual & Morse Chart side by side */
+/* Right Column: Webcam Video Feed on Top, Morse Buffer & Translation underneath */
 .hero-right {
-  display: grid;
-  grid-template-columns: 1fr 270px;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-items: stretch;
   position: relative;
+  width: 100%;
 }
 
 .portrait-container {
   width: 100%;
-  aspect-ratio: 4 / 5;
-  height: 100%;
-  max-height: 570px;
+  aspect-ratio: 16 / 9;
+  min-height: 280px;
+  max-height: 380px;
   background-color: #0A0A0A;
   border-radius: var(--radius-hero);
   overflow: hidden;
@@ -901,7 +903,7 @@ body {
 .morse-flip-container {
   perspective: 1400px;
   height: 100%;
-  max-height: 570px;
+  min-height: 600px;
   position: relative;
   border-radius: var(--radius-hero);
   width: 100%;
@@ -1213,8 +1215,8 @@ body {
 
 .morse-chart-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  gap: 7px;
   overflow-y: auto;
   padding-right: 4px;
   flex: 1;
@@ -1311,26 +1313,32 @@ body {
 
   .hero-section {
     grid-template-columns: 1fr;
-    gap: 36px;
-    padding: 32px 24px 24px 24px;
-  }
-
-  .hero-title {
-    font-size: 40px;
+    gap: 24px;
+    padding: 20px 16px 20px 16px;
   }
 
   .hero-right {
-    grid-template-columns: 1fr;
-    gap: 20px;
+    order: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .hero-left {
+    order: 2;
+    min-height: 480px;
   }
 
   .portrait-container {
-    max-height: 440px;
+    aspect-ratio: 16 / 10;
+    max-height: 360px;
+    min-height: 240px;
   }
 
   .morse-chart-panel,
   .morse-flip-container {
-    max-height: 440px;
+    min-height: 480px;
+    max-height: 580px;
   }
 }
 

@@ -74,168 +74,8 @@ const MORSE_MAP: Record<string, string> = {
 
       <!-- Hero Section -->
       <section class="hero-section">
-        <!-- Left Column: Title, Description & Action/Login Card -->
+        <!-- Left Column: Morse Reference Chart & Mode Docs Panel -->
         <div class="hero-left">
-          <div class="hero-pill-tag">
-            <span class="pulse-dot"></span>
-            Assistive Technology • For Speech & Hearing Impairments
-          </div>
-
-          <!-- Hero Headline (Editorial serif, 56px, centered) -->
-          <h1 class="hero-title">
-            Convert micro actions into <em>living words.</em>
-          </h1>
-
-          <!-- Hero Subtitle (Mono or sans, 14px, wide line-height, centered) -->
-          <p class="hero-subtitle">
-            An accessible communication interface transforming eye blinks (<strong>Blink2Morse</strong> <span class="mode-tag-beta">BETA</span>) and finger micro-taps (<strong>Fin2Morse</strong>) into live Morse code and natural speech. Designed to empower deaf-mute, non-verbal, and motor-impaired individuals.
-          </p>
-
-          <!-- Card: Morse Console -->
-          <div class="login-card" id="cardContainer">
-            <!-- Live Morse Console -->
-            <div class="morse-console-panel" id="viewDecoder">
-              <div class="console-header">
-                <span class="console-label">Morse Buffer & Translation</span>
-                <div class="console-tools">
-                  <button class="icon-btn-sm" id="btnSoundToggle" title="Toggle Morse Sound (Web Audio)" type="button">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                    </svg>
-                  </button>
-                  <button class="icon-btn-sm" id="btnOpenAlphabet" title="Open Morse Chart" type="button">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="16" x2="12" y2="12" />
-                      <line x1="12" y1="8" x2="12.01" y2="8" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Output Display Box -->
-              <div class="output-display-box">
-                <div>
-                  <div class="morse-stream-symbols" id="morseSymbolsDisplay">
-                    <span class="morse-placeholder">Blink or tap pad / buttons below to transmit...</span>
-                  </div>
-                </div>
-                <div class="decoded-text-box">
-                  <span class="decoded-caption">Decoded Text:</span>
-                  <span class="decoded-result" id="decodedTextDisplay">
-                    <span class="decoded-placeholder">Waiting for Morse...</span>
-                  </span>
-                </div>
-              </div>
-
-              <!-- Fin2Morse Tactile Tap Pad (Hold <380ms Dot • | Hold >380ms Dash —) -->
-              <div class="fin-tap-zone" id="finTapZone" role="button" tabindex="0" title="Touch & hold here: <380ms Dot (•) | >380ms Dash (—)">
-                <div class="fin-tap-header">
-                  <div class="fin-tap-brand">
-                    <span class="fin-tap-indicator" id="finTapIndicator"></span>
-                    <span class="fin-tap-title" id="finTapTitle">Fin2Morse Tactile Tap Pad</span>
-                  </div>
-                  <span class="fin-tap-badge" id="finTapBadge">HOLD: &lt;380ms • | &gt;380ms —</span>
-                </div>
-                <div class="fin-tap-body">
-                  <div class="fin-tap-icon-wrap" id="finTapIconWrap">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5"/>
-                      <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
-                      <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
-                      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
-                    </svg>
-                  </div>
-                  <div class="fin-tap-info">
-                    <span class="fin-tap-status" id="finTapStatus">Touch or Click to input Morse</span>
-                    <span class="fin-tap-sub" id="finTapSub">Release &lt;380ms = • Dot | Hold &gt;380ms = — Dash</span>
-                  </div>
-                </div>
-                <div class="fin-hold-track" aria-hidden="true">
-                  <div class="fin-hold-progress" id="finHoldProgress"></div>
-                </div>
-              </div>
-
-              <!-- Interactive Simulator Buttons -->
-              <div class="simulation-row">
-                <button class="btn-sim btn-sim-accent" id="btnSimDot" title="Dot (<380ms / D key)" type="button">
-                  <span>•</span> Dot
-                </button>
-                <button class="btn-sim btn-sim-accent" id="btnSimDash" title="Dash (>380ms / F key)" type="button">
-                  <span>—</span> Dash
-                </button>
-                <button class="btn-sim" id="btnSimSpace" title="Finalize Letter / Space" type="button">
-                  <span>␣</span> Space
-                </button>
-                <button class="btn-sim" id="btnSimClear" title="Clear Buffer" type="button">
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            <!-- Privacy note -->
-            <p class="legal-note">
-              Webcam video is processed in real time for eye blink detection. No video is recorded or stored.
-            </p>
-          </div>
-        </div>
-
-        <!-- Right Column: Vertical Portrait Visual with Floating Bar -->
-        <div class="hero-right">
-          <div class="portrait-container" id="portraitBox">
-            <!-- Default portrait photo (person holding phone / moody dark background) -->
-            <img
-              src="./assets/hero-portrait.jpg"
-              alt="Person using Blink2Morse eye tracking"
-              class="portrait-image"
-              id="heroPortraitImg"
-            />
-
-            <!-- Live Webcam Video Feed & Canvas HUD Overlay -->
-            <video class="webcam-video" id="webcamVideo" playsinline muted autoplay></video>
-            <canvas class="webcam-canvas" id="webcamCanvas"></canvas>
-
-            <!-- Top Camera Status Bar & Switch Button -->
-            <div class="camera-top-controls">
-              <div class="status-badge" id="cameraStatusBadge">
-                <span class="indicator-dot" id="camStatusDot"></span>
-                <span id="camStatusText">WEBCAM READY</span>
-              </div>
-              <button class="btn-toggle-cam" id="btnToggleCamera" type="button">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-                  <circle cx="12" cy="13" r="3"/>
-                </svg>
-                <span id="btnToggleCamText">Launch Camera</span>
-              </button>
-            </div>
-
-            <!-- Floating bar on hero image (translucent glass, icon left, up-arrow button right) -->
-            <div class="hero-floating-bar" id="floatingBar">
-              <div class="floating-bar-left">
-                <div class="floating-icon" id="floatingIcon">
-                  <!-- Eye blink waveform icon -->
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="2" fill="currentColor"/>
-                    <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/>
-                  </svg>
-                </div>
-                <div class="floating-bar-text">
-                  <span class="floating-bar-title" id="floatingBarStatus">Fin2Morse Active (Finger Tap)</span>
-                  <span class="floating-bar-desc" id="floatingBarSub">Tap Spacebar or screen (Hold &lt;380ms = • Dot, Hold &gt;380ms = — Dash)</span>
-                </div>
-              </div>
-              <!-- Up Arrow button on the right -->
-              <button class="floating-arrow-btn" id="btnTransmit" title="Enter / Transmit Morse Character" type="button">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="19" x2="12" y2="5" />
-                  <polyline points="5 12 12 5 19 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
           <!-- Flippable Reference & Docs Panel (Flips from Top to Bottom) -->
           <div class="morse-flip-container" id="morseFlipContainer">
             <div class="morse-flip-inner" id="morseFlipInner">
@@ -249,7 +89,7 @@ const MORSE_MAP: Record<string, string> = {
                         <circle cx="12" cy="12" r="3" fill="#C9B8FF" />
                       </svg>
                     </div>
-                    <span class="morse-chart-title">Morse Chart</span>
+                    <span class="morse-chart-title">Morse Reference Chart</span>
                   </div>
                   <button class="flip-toggle-btn" id="btnFlipToDocs" type="button" title="Flip card to Mode Docs">
                     <span>Docs</span>
@@ -349,6 +189,152 @@ const MORSE_MAP: Record<string, string> = {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Webcam Video Feed on Top, Morse Buffer & Translation underneath -->
+        <div class="hero-right">
+          <!-- Webcam Box -->
+          <div class="portrait-container" id="portraitBox">
+            <!-- Default portrait photo (person holding phone / moody dark background) -->
+            <img
+              src="./assets/hero-portrait.jpg"
+              alt="Person using Blink2Morse eye tracking"
+              class="portrait-image"
+              id="heroPortraitImg"
+            />
+
+            <!-- Live Webcam Video Feed & Canvas HUD Overlay -->
+            <video class="webcam-video" id="webcamVideo" playsinline muted autoplay></video>
+            <canvas class="webcam-canvas" id="webcamCanvas"></canvas>
+
+            <!-- Top Camera Status Bar & Switch Button -->
+            <div class="camera-top-controls">
+              <div class="status-badge" id="cameraStatusBadge">
+                <span class="indicator-dot" id="camStatusDot"></span>
+                <span id="camStatusText">WEBCAM READY</span>
+              </div>
+              <button class="btn-toggle-cam" id="btnToggleCamera" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                  <circle cx="12" cy="13" r="3"/>
+                </svg>
+                <span id="btnToggleCamText">Launch Camera</span>
+              </button>
+            </div>
+
+            <!-- Floating bar on hero image (translucent glass, icon left, up-arrow button right) -->
+            <div class="hero-floating-bar" id="floatingBar">
+              <div class="floating-bar-left">
+                <div class="floating-icon" id="floatingIcon">
+                  <!-- Eye blink waveform icon -->
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="2" fill="currentColor"/>
+                    <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/>
+                  </svg>
+                </div>
+                <div class="floating-bar-text">
+                  <span class="floating-bar-title" id="floatingBarStatus">Fin2Morse Active (Finger Tap)</span>
+                  <span class="floating-bar-desc" id="floatingBarSub">Tap Spacebar or screen (Hold &lt;380ms = • Dot, Hold &gt;380ms = — Dash)</span>
+                </div>
+              </div>
+              <!-- Up Arrow button on the right -->
+              <button class="floating-arrow-btn" id="btnTransmit" title="Enter / Transmit Morse Character" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="19" x2="12" y2="5" />
+                  <polyline points="5 12 12 5 19 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Morse Buffer & Translation Console (Positioned directly under webcam) -->
+          <div class="login-card" id="cardContainer">
+            <!-- Live Morse Console -->
+            <div class="morse-console-panel" id="viewDecoder">
+              <div class="console-header">
+                <span class="console-label">Morse Buffer & Translation</span>
+                <div class="console-tools">
+                  <button class="icon-btn-sm" id="btnSoundToggle" title="Toggle Morse Sound (Web Audio)" type="button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                    </svg>
+                  </button>
+                  <button class="icon-btn-sm" id="btnOpenAlphabet" title="Open Morse Chart" type="button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Output Display Box -->
+              <div class="output-display-box">
+                <div>
+                  <div class="morse-stream-symbols" id="morseSymbolsDisplay">
+                    <span class="morse-placeholder">Blink or tap pad / buttons below to transmit...</span>
+                  </div>
+                </div>
+                <div class="decoded-text-box">
+                  <span class="decoded-caption">Decoded Text:</span>
+                  <span class="decoded-result" id="decodedTextDisplay">
+                    <span class="decoded-placeholder">Waiting for Morse...</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Fin2Morse Tactile Tap Pad (Hold <380ms Dot • | Hold >380ms Dash —) -->
+              <div class="fin-tap-zone" id="finTapZone" role="button" tabindex="0" title="Touch & hold here: <380ms Dot (•) | >380ms Dash (—)">
+                <div class="fin-tap-header">
+                  <div class="fin-tap-brand">
+                    <span class="fin-tap-indicator" id="finTapIndicator"></span>
+                    <span class="fin-tap-title" id="finTapTitle">Fin2Morse Tactile Tap Pad</span>
+                  </div>
+                  <span class="fin-tap-badge" id="finTapBadge">HOLD: &lt;380ms • | &gt;380ms —</span>
+                </div>
+                <div class="fin-tap-body">
+                  <div class="fin-tap-icon-wrap" id="finTapIconWrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5"/>
+                      <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
+                      <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/>
+                      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+                    </svg>
+                  </div>
+                  <div class="fin-tap-info">
+                    <span class="fin-tap-status" id="finTapStatus">Touch or Click to input Morse</span>
+                    <span class="fin-tap-sub" id="finTapSub">Release &lt;380ms = • Dot | Hold &gt;380ms = — Dash</span>
+                  </div>
+                </div>
+                <div class="fin-hold-track" aria-hidden="true">
+                  <div class="fin-hold-progress" id="finHoldProgress"></div>
+                </div>
+              </div>
+
+              <!-- Interactive Simulator Buttons -->
+              <div class="simulation-row">
+                <button class="btn-sim btn-sim-accent" id="btnSimDot" title="Dot (<380ms / D key)" type="button">
+                  <span>•</span> Dot
+                </button>
+                <button class="btn-sim btn-sim-accent" id="btnSimDash" title="Dash (>380ms / F key)" type="button">
+                  <span>—</span> Dash
+                </button>
+                <button class="btn-sim" id="btnSimSpace" title="Finalize Letter / Space" type="button">
+                  <span>␣</span> Space
+                </button>
+                <button class="btn-sim" id="btnSimClear" title="Clear Buffer" type="button">
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <!-- Privacy note -->
+            <p class="legal-note">
+              Webcam video is processed in real time for eye blink &amp; hand detection. No video is recorded or stored.
+            </p>
           </div>
         </div>
       </section>
