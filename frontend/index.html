@@ -191,13 +191,19 @@ const MORSE_MAP: Record<string, string> = {
         <div class="hero-right">
           <!-- Webcam Box -->
           <div class="portrait-container" id="portraitBox">
-            <!-- Default portrait photo (person holding phone / moody dark background) -->
-            <img
-              src="./assets/hero-portrait.jpg"
-              alt="Person using Blink2Morse eye tracking"
-              class="portrait-image"
-              id="heroPortraitImg"
-            />
+            <!-- Off-camera Solid Black Screen with Standby Status -->
+            <div class="camera-standby-view" id="heroPortraitImg">
+              <div class="camera-standby-content">
+                <div class="standby-cam-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                    <circle cx="12" cy="13" r="3"/>
+                  </svg>
+                </div>
+                <span class="standby-cam-text">Camera Off</span>
+                <span class="standby-cam-sub">Press "Launch Camera" to start tracking</span>
+              </div>
+            </div>
 
             <!-- Live Webcam Video Feed & Canvas HUD Overlay -->
             <video class="webcam-video" id="webcamVideo" playsinline muted autoplay></video>

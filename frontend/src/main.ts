@@ -97,7 +97,7 @@ const btnToggleCamera = document.getElementById('btnToggleCamera') as HTMLButton
 const btnToggleCamText = document.getElementById('btnToggleCamText') as HTMLSpanElement;
 const webcamVideo = document.getElementById('webcamVideo') as HTMLVideoElement;
 const webcamCanvas = document.getElementById('webcamCanvas') as HTMLCanvasElement;
-const heroPortraitImg = document.getElementById('heroPortraitImg') as HTMLImageElement;
+const heroPortraitImg = document.getElementById('heroPortraitImg') as HTMLElement | null;
 const camStatusDot = document.getElementById('camStatusDot') as HTMLSpanElement;
 const camStatusText = document.getElementById('camStatusText') as HTMLSpanElement;
 
@@ -249,7 +249,7 @@ async function toggleCamera() {
 
     if (success) {
       isCameraActive = true;
-      heroPortraitImg.style.display = 'none';
+      if (heroPortraitImg) heroPortraitImg.style.display = 'none';
       webcamVideo.style.display = 'block';
       webcamCanvas.style.display = 'block';
 
@@ -272,6 +272,7 @@ async function toggleCamera() {
     } else {
       btnToggleCamText.textContent = 'Launch Camera';
       btnToggleCamera.classList.remove('is-active');
+      if (heroPortraitImg) heroPortraitImg.style.display = 'flex';
       showToast('Camera permission denied or camera unavailable');
     }
   } else {
@@ -279,7 +280,7 @@ async function toggleCamera() {
     isCameraActive = false;
     webcamVideo.style.display = 'none';
     webcamCanvas.style.display = 'none';
-    heroPortraitImg.style.display = 'block';
+    if (heroPortraitImg) heroPortraitImg.style.display = 'flex';
 
     btnToggleCamText.textContent = 'Launch Camera';
     btnToggleCamera.classList.remove('is-active');
