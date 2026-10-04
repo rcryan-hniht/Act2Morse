@@ -325,7 +325,9 @@ cameraController.onMetrics((metrics: CameraMetrics) => {
         : `HAND ACTIVE • ${metrics.fps} FPS`;
     } else {
       camStatusDot.style.background = '#F59E0B';
-      camStatusText.textContent = 'SHOW HAND TO CAMERA';
+      camStatusText.textContent = cameraController.isModelReady()
+        ? 'SHOW HAND TO CAMERA'
+        : (cameraController.isModelLoadingActive() ? 'LOADING VISION MODEL...' : 'SHOW HAND TO CAMERA');
     }
   } else {
     if (!wsBridge.isConnected()) {

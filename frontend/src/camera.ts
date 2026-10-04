@@ -81,11 +81,9 @@ export class CameraController {
   private isModelLoading: boolean = false;
   private lastRecognizeTime: number = 0;
   private detectedGestureName: string = '';
-  private isRecognizing: boolean = false;
   private lastVideoTime: number = -1;
   private latestHandResults: GestureRecognizerResult | null = null;
   private lastHandResultTime: number = 0;
-  private hasNewVideoFrame: boolean = false;
 
   // Eye tracking state (Blink2Morse)
   private isBlinkActive: boolean = false;
@@ -131,64 +129,115 @@ export class CameraController {
     this.initHandGestureModel();
   }
 
+  public isModelReady(): boolean {
+    return this.gestureRecognizer !== null;
+  }
+
+  public isModelLoadingActive(): boolean {
+    return this.isModelLoading;
+  }
+
   /**
-   * Initializes the MediaPipe Gesture Recognizer using hand_gesture.task
-   * Uses local /wasm directory for zero-latency SIMD WebAssembly loading.
+   * Fetches the hand_gesture.task model bundle.
+   * Checks local file and verifies ZIP magic header (PK\x03\x04).
+   * Automatically falls back to Google's official MediaPipe CDN if local file is missing,
+   * corrupted, or replaced by an SPA HTML rewrite (e.g. on Vercel).
+   */
+  private async fetchModelBuffer(): Promise<Uint8Array> {
+    const candidates = [
+      '/models/hand_gesture.task',
+      './models/hand_gesture.task',
+    ];
+
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url);
+        const ctype = (res.headers.get('content-type') || '').toLowerCase();
+        if (res.ok && !ctype.includes('text/html')) {
+          const buf = await res.arrayBuffer();
+          const u8 = new Uint8Array(buf);
+          // Check for valid zip magic bytes PK\x03\x04
+          if (u8.length > 50000 && u8[0] === 0x50 && u8[1] === 0x4b) {
+            console.info('[Fin2Morse] Loaded local hand_gesture.task model bundle');
+            return u8;
+          }
+        }
+      } catch {
+        // Continue to fallback
+      }
+    }
+
+    console.info('[Fin2Morse] Local model unavailable or invalid; downloading from official MediaPipe Google CDN...');
+    const cdnUrl = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
+    const cdnRes = await fetch(cdnUrl);
+    if (!cdnRes.ok) {
+      throw new Error(`Failed to load gesture recognizer model from CDN: ${cdnRes.statusText}`);
+    }
+    const cdnBuf = await cdnRes.arrayBuffer();
+    console.info('[Fin2Morse] Successfully downloaded gesture_recognizer.task from Google CDN');
+    return new Uint8Array(cdnBuf);
+  }
+
+  /**
+   * Creates GestureRecognizer with GPU delegate, automatically falling back to CPU.
+   */
+  private async createRecognizer(vision: any, modelBuffer: Uint8Array): Promise<GestureRecognizer> {
+    const options = {
+      runningMode: 'VIDEO' as const,
+      numHands: 1,
+      minHandDetectionConfidence: 0.35,
+      minHandPresenceConfidence: 0.35,
+      minTrackingConfidence: 0.35,
+    };
+
+    try {
+      return await GestureRecognizer.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetBuffer: modelBuffer,
+          delegate: 'GPU',
+        },
+        ...options,
+      });
+    } catch (gpuErr) {
+      console.warn('[Fin2Morse] WebGL/GPU delegate unavailable, using CPU delegate:', gpuErr);
+      return await GestureRecognizer.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetBuffer: modelBuffer,
+          delegate: 'CPU',
+        },
+        ...options,
+      });
+    }
+  }
+
+  /**
+   * Initializes the MediaPipe Gesture Recognizer using hand_gesture.task.
+   * Multi-tiered fallback for both WASM runtime and model buffer.
    */
   private async initHandGestureModel() {
     if (this.gestureRecognizer || this.isModelLoading) return;
     this.isModelLoading = true;
 
     try {
-      let vision;
+      const modelBuffer = await this.fetchModelBuffer();
+
       try {
-        vision = await FilesetResolver.forVisionTasks('/wasm');
-      } catch {
-        vision = await FilesetResolver.forVisionTasks(
+        const vision = await FilesetResolver.forVisionTasks('/wasm');
+        this.gestureRecognizer = await this.createRecognizer(vision, modelBuffer);
+      } catch (localErr) {
+        console.warn('[Fin2Morse] Local WASM init failed, attempting jsDelivr CDN WASM:', localErr);
+        const cdnVision = await FilesetResolver.forVisionTasks(
           'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
         );
+        this.gestureRecognizer = await this.createRecognizer(cdnVision, modelBuffer);
       }
-
-      // Try GPU delegate first, fallback to CPU delegate
-      try {
-        this.gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: '/models/hand_gesture.task',
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO',
-          numHands: 1,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5,
-        });
-      } catch {
-        this.gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: '/models/hand_gesture.task',
-            delegate: 'CPU',
-          },
-          runningMode: 'VIDEO',
-          numHands: 1,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5,
-        });
-      }
+      console.info('[Fin2Morse] Hand tracking model loaded successfully');
     } catch (err) {
-      console.warn('Could not initialize hand_gesture.task via WebAssembly:', err);
+      console.error('[Fin2Morse] Could not initialize hand_gesture.task:', err);
     } finally {
       this.isModelLoading = false;
     }
   }
-
-  private onVideoFrame = () => {
-    if (!this.isRunning || !this.videoEl) return;
-    this.hasNewVideoFrame = true;
-    if ('requestVideoFrameCallback' in this.videoEl) {
-      (this.videoEl as any).requestVideoFrameCallback(this.onVideoFrame);
-    }
-  };
 
   public async start(video: HTMLVideoElement, canvas: HTMLCanvasElement): Promise<boolean> {
     this.videoEl = video;
@@ -221,15 +270,10 @@ export class CameraController {
       this.videoEl.srcObject = this.stream;
       await this.videoEl.play();
 
-      // Hook hardware video frame decoding event
-      if ('requestVideoFrameCallback' in this.videoEl) {
-        (this.videoEl as any).requestVideoFrameCallback(this.onVideoFrame);
-      }
-
       this.isRunning = true;
       this.lastFrameTime = performance.now();
       this.lastVideoTime = -1;
-      this.hasNewVideoFrame = false;
+      this.lastHandResultTime = 0;
       this.latestHandResults = null;
       this.earHistory = [];
       this.baselineEar = 0.30;
@@ -254,10 +298,9 @@ export class CameraController {
 
   public stop() {
     this.isRunning = false;
-    this.hasNewVideoFrame = false;
     this.latestHandResults = null;
     this.lastVideoTime = -1;
-    this.isRecognizing = false;
+    this.lastHandResultTime = 0;
     if (this.animFrameId !== null) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
@@ -292,8 +335,7 @@ export class CameraController {
     this.thumbLeftTriggered = false;
     this.latestHandResults = null;
     this.lastVideoTime = -1;
-    this.hasNewVideoFrame = false;
-    this.isRecognizing = false;
+    this.lastHandResultTime = 0;
     this.onPinchStateCallbacks.forEach((cb) => cb(false, 0));
     if (mode === 'Fin2Morse' && !this.gestureRecognizer) {
       this.initHandGestureModel();
@@ -421,7 +463,7 @@ export class CameraController {
   /**
    * Fin2Morse Hand Tracking: Uses MediaPipe hand_gesture.task model.
    * Renders finger bones in WHITE (#FFFFFF) and landmark points in CYAN (#00FFFF).
-   * Runs render & gesture loop at true 60 FPS.
+   * Uses video.currentTime to skip duplicate frames and avoid re-running inference on same image.
    */
   private processHandFrame(
     ctx: CanvasRenderingContext2D,
@@ -430,53 +472,40 @@ export class CameraController {
     dpr: number,
     now: number
   ) {
-    if (!this.videoEl || this.videoEl.readyState < 2) return;
+    if (!this.videoEl || this.videoEl.readyState < 2 || !this.videoEl.videoWidth || !this.videoEl.videoHeight) return;
 
-    // 1. Detect if a new hardware video frame is ready
-    let isNewFrame = false;
-    const video = this.videoEl;
-    if (typeof (video as any).requestVideoFrameCallback === 'function') {
-      isNewFrame = this.hasNewVideoFrame;
-      this.hasNewVideoFrame = false;
-    } else {
-      const currentVideoTime = video.currentTime;
-      isNewFrame = currentVideoTime !== this.lastVideoTime;
+    // 1. Run MediaPipe inference only when a genuinely new video frame is available
+    //    video.currentTime advances when the decoder pushes a new decoded frame.
+    const currentVideoTime = this.videoEl.currentTime;
+    const isNewVideoFrame = (currentVideoTime !== this.lastVideoTime) || (now - this.lastRecognizeTime >= 33);
+
+    if (this.gestureRecognizer && isNewVideoFrame) {
       this.lastVideoTime = currentVideoTime;
-    }
-
-    // Safety fallback: ensure recognition runs at least every 33ms if frame callbacks stall
-    if (!isNewFrame && (now - this.lastRecognizeTime >= 33)) {
-      isNewFrame = true;
-    }
-
-    // 2. Run MediaPipe Gesture Recognizer only when new video frame is ready and inference is idle
-    if (this.gestureRecognizer && isNewFrame && !this.isRecognizing && (now > this.lastRecognizeTime)) {
-      this.lastRecognizeTime = now;
-      this.isRecognizing = true;
+      const frameTime = Math.max(now, this.lastRecognizeTime + 1);
+      this.lastRecognizeTime = frameTime;
       try {
-        const results = this.gestureRecognizer.recognizeForVideo(this.videoEl, now);
-        this.latestHandResults = results;
-        // Only refresh lastHandResultTime when landmarks are actually detected
-        // so the 220ms stale guard triggers correctly when hand leaves frame
+        const results = this.gestureRecognizer.recognizeForVideo(this.videoEl, frameTime);
         if (results && results.landmarks && results.landmarks.length > 0) {
+          this.latestHandResults = results;
           this.lastHandResultTime = now;
         }
       } catch (err) {
-        // Model frame error handling
-      } finally {
-        this.isRecognizing = false;
+        console.warn('[Fin2Morse] recognizeForVideo error:', err);
       }
     }
 
-    // 3. Render latest hand tracking results at rock-solid 60 FPS on every animation frame
-    const results = this.latestHandResults;
-    // isRecent: only apply stale-guard once lastHandResultTime has been set by first inference
-    const isRecent = results !== null && (this.lastHandResultTime === 0 || (now - this.lastHandResultTime < 220));
-    const hasHand = isRecent && results && results.landmarks && results.landmarks.length > 0;
+    // 2. Render latest valid results if within 250ms (smoothing single-frame decoder dropouts)
+    const hasValidHand = !!(
+      this.latestHandResults &&
+      this.latestHandResults.landmarks &&
+      this.latestHandResults.landmarks.length > 0 &&
+      this.lastHandResultTime > 0 &&
+      (now - this.lastHandResultTime < 250)
+    );
 
-    if (hasHand && results) {
+    if (hasValidHand && this.latestHandResults) {
       this.isHandDetected = true;
-      this.renderHandGestureResult(ctx, results, targetW, targetH, dpr, now);
+      this.renderHandGestureResult(ctx, this.latestHandResults, targetW, targetH, dpr, now);
 
       const metrics: CameraMetrics = {
         fps: this.currentFps,
@@ -499,6 +528,9 @@ export class CameraController {
       this.fistTriggered = false;
       this.thumbLeftHoldStartTime = 0;
       this.thumbLeftTriggered = false;
+      if (now - this.lastHandResultTime >= 250) {
+        this.latestHandResults = null;
+      }
 
       if (this.isHandTapping) {
         const duration = Math.round(now - this.handTapStartTime);
@@ -527,7 +559,7 @@ export class CameraController {
       this.onMetricsCallbacks.forEach((cb) => cb(metrics));
     }
 
-    // 4. Stream frames to WebSocket backend in Fin2Morse mode (every 66ms ~ 15fps)
+    // 3. Stream frames to WebSocket backend (every 66ms ~ 15fps)
     if (now - this.lastFrameSentTime >= 66) {
       this.lastFrameSentTime = now;
       const tx = this.prepareTransmissionCanvas();

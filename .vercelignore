@@ -3,5 +3,4 @@ backend
 .venv
 .pytest_cache
 *.py
-*.task
 uv.lock
