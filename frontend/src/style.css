@@ -704,14 +704,36 @@ body {
 .portrait-container {
   width: 100%;
   aspect-ratio: 16 / 9;
-  min-height: 280px;
-  max-height: 380px;
+  min-height: 600px;
   background-color: #000000;
   border-radius: 0;
   overflow: hidden;
   position: relative;
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.camera-character {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 16;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: clamp(80px, 16vw, 160px);
+  font-weight: 700;
+  color: #FFFFFF;
+  text-shadow: 0 2px 12px #000000;
+}
+
+.camera-decoded-text {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  color: var(--text-main);
 }
 
 /* Off-camera Solid Black Standby Screen */
@@ -1392,8 +1414,7 @@ body {
 
   .portrait-container {
     aspect-ratio: 16 / 10;
-    max-height: 360px;
-    min-height: 240px;
+    min-height: 600px;
   }
 
   .morse-chart-panel,
@@ -1764,7 +1785,8 @@ body {
 
   .portrait-container {
     aspect-ratio: 4 / 3;
-    min-height: 0;
+    /* Add 192 CSS pixels (2 CSS inches) to the previous 4:3 mobile frame. */
+    min-height: calc(75vw - 18px + 192px);
     max-height: none;
   }
 

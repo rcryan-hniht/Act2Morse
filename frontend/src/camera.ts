@@ -731,7 +731,7 @@ export class CameraController {
           this.fistHoldStartTime = now;
         }
         const fistElapsed = now - this.fistHoldStartTime;
-        if (fistElapsed >= 260 && !this.fistTriggered) {
+        if (fistElapsed >= 600 && !this.fistTriggered) {
           this.fistTriggered = true;
           this.onGestureActionCallbacks.forEach((cb) => cb({ action: 'space', timestamp: now }));
         }
@@ -751,7 +751,7 @@ export class CameraController {
         ctx.fillStyle = this.fistTriggered ? '#10B981' : '#00FFFF';
         ctx.font = `bold ${Math.round(11 * dpr)}px 'Inter', sans-serif`;
         ctx.textAlign = 'center';
-        const fistText = this.fistTriggered ? '✊ CLOSED FIST → SPACE' : `✊ FIST HOLD (${Math.round(fistElapsed)}ms)`;
+        const fistText = this.fistTriggered ? '✊ CLOSED FIST → SPACE' : `✊ FIST HOLD (${Math.round(fistElapsed)}/600ms)`;
         ctx.fillText(fistText, pMiddleMcp.x, pMiddleMcp.y - Math.round(42 * dpr));
         ctx.restore();
       } else {
