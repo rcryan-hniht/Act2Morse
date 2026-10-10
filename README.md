@@ -50,26 +50,29 @@ Communication is a fundamental human right. However, millions of people worldwid
 
 ## 🏗️ Architecture
 
-```
-┌────────────────────────────────────────────────────────┐
-│                   Act2Morse Web App                    │
-│                 (Vite + TypeScript)                    │
-│                                                        │
-│   Webcam Feed ──► Canvas Capture ──► Web Audio Beeps   │
-│         │                                    ▲         │
-│         ▼ (Binary JPEG Blob via WebSocket)   │         │
-└─────────┼────────────────────────────────────┼─────────┘
-          │                                    │
-          ▼                                    │
-┌──────────────────────────────────────────────┴─────────┐
-│                 Act2Morse Backend                      │
-│                (FastAPI + Python)                      │
-│                                                        │
-│   Blink Mode: MichalMlodawski MobileNetV2 Eye Classifier│
-│   Fin Mode: opencv/handpose_estimation_mediapipe       │
-│   BlinkTracker: Timing state machine (Dot/Dash/Gaps)   │
-│   MorseDecoder: Alphanumeric symbol buffer             │
-└────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    Camera[Webcam] --> Capture[Canvas capture]
+    Manual[Touch / keyboard input] --> ClientMorse[Client Morse decoder]
+
+    subgraph Frontend["Web App · Vite + TypeScript"]
+        Capture --> LocalVision["Browser vision · MediaPipe"]
+        LocalVision --> ClientMorse
+        ClientMorse --> Output["Decoded text + temporary character overlay"]
+        ClientMorse --> Audio[Web Audio feedback]
+    end
+
+    subgraph Backend["Backend · FastAPI + Python"]
+        WebSocket[WebSocket endpoint]
+        WebSocket --> Eye["Blink · MobileNetV2 eye classifier"]
+        WebSocket --> Hand["Fin · OpenCV hand pose"]
+        Eye --> Session["Morse session · timing + decoding"]
+        Hand --> Session
+    end
+
+    Capture -->|Binary JPEG frames| WebSocket
+    Session -->|JSON events / symbols / text| Output
+    Session -->|Morse events| Audio
 ```
 
 ---
@@ -114,17 +117,19 @@ access from a phone or another computer requires a separate network and HTTPS se
 2. Choose **Fin2Morse** (finger/touch input) or **Blink2Morse** (eye tracking, beta).
 3. For camera tracking, click **Launch Camera**, grant browser camera permission,
    and position your hand or face in the webcam frame. Wait for the vision model to load.
-4. In **Fin2Morse**, touch/click and hold the tactile tap pad or hold **Spacebar**:
-   release before 380 ms for a dot (`•`), or hold longer for a dash (`—`).
-   You can also use the dot/dash buttons without launching the camera.
-5. In **Blink2Morse**, use deliberate short eye closures for dots and longer
-   closures for dashes. Timing depends on the active detection engine and its thresholds.
-6. Pause to finish a letter automatically, or use the **Space** button to finish
-   the current letter and add a word space. For example, dot then dash (`.-`) decodes to **A**.
-7. Read the result in **Morse Buffer & Translation**. Click the **↑** button to
-   finish the current letter and copy the decoded text. Use **Clear** to reset.
+4. In **Fin2Morse**, hold **Spacebar** to input Morse: release before 380 ms
+   for a dot (`•`), or hold longer for a dash (`—`). With the camera off,
+   you can also touch/click and hold the webcam area. Keyboard **D** and **F**
+   enter a dot and dash respectively.
+5. With camera tracking, hold a closed fist for at least **600 ms** to add a word
+   space; point your right thumb left to delete. In **Blink2Morse**, deliberate
+   short eye closures create dots and longer closures create dashes.
+6. Pause to finish a letter automatically. Each completed character appears at
+   the center of the webcam for about **1 second**, then disappears.
+7. The decoded sentence stays below the gesture status inside the webcam.
+   Click **↑** to finish the current letter and copy the decoded text.
 8. Tap a character in **Morse Reference Chart** to hear its Morse sequence.
-   Open **Docs** for gesture instructions or use the sound button to mute audio.
+   Open **Docs** for gesture instructions.
 
 ---
 
