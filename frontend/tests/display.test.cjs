@@ -11,7 +11,13 @@ test('completed characters appear for 1s without restarting on repeated frames',
   const { outputText } = ts.transpileModule(source.slice(start, end), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   });
-  const character = { hidden: true, textContent: '' };
+  let animations = 0;
+  let reducedMotion = false;
+  const character = {
+    hidden: true, textContent: '',
+    getAnimations: () => [],
+    animate: () => { animations++; },
+  };
   const line = { textContent: '', scrollWidth: 100 };
   const timers = new Map();
   let nextId = 0;
@@ -19,6 +25,7 @@ test('completed characters appear for 1s without restarting on repeated frames',
     decodedText: '', decodedTextDisplay: line,
     document: { getElementById: () => character },
     window: {
+      matchMedia: () => ({ matches: reducedMotion }),
       setTimeout: (callback, ms) => {
         assert.equal(ms, 1000);
         timers.set(++nextId, callback);
@@ -37,8 +44,10 @@ test('completed characters appear for 1s without restarting on repeated frames',
   assert.equal(line.textContent, 'A');
   assert.equal(character.textContent, 'A');
   assert.equal(character.hidden, false);
+  assert.equal(animations, 1);
   update('A');
   assert.equal(nextId, 1);
+  assert.equal(animations, 1);
   update('AB');
   assert.equal(character.textContent, 'B');
   assert.equal(timers.has(1), false);
@@ -52,4 +61,9 @@ test('completed characters appear for 1s without restarting on repeated frames',
   assert.equal(character.hidden, true);
   update('');
   assert.equal(line.textContent, 'Waiting for Morse...');
+  reducedMotion = true;
+  const previousAnimations = animations;
+  update('D');
+  assert.equal(character.hidden, false);
+  assert.equal(animations, previousAnimations);
 });

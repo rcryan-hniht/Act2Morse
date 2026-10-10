@@ -123,6 +123,14 @@ function updateDisplay() {
       window.clearTimeout(characterTimeoutId);
       cameraCharacter.textContent = char;
       cameraCharacter.hidden = false;
+      cameraCharacter.getAnimations().forEach(animation => animation.cancel());
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        cameraCharacter.animate([
+          { transform: 'translate(-50%, -50%) scale(0.65)', opacity: 0 },
+          { transform: 'translate(-50%, -50%) scale(1.06)', opacity: 1, offset: 0.7 },
+          { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+        ], { duration: 260, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+      }
       characterTimeoutId = window.setTimeout(() => {
         cameraCharacter.hidden = true;
       }, 1000);

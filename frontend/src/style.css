@@ -718,9 +718,10 @@ body {
   transform: translate(-50%, -50%);
   z-index: 16;
   pointer-events: none;
-  font-family: var(--font-mono);
+  font-family: var(--font-serif);
   font-size: clamp(80px, 16vw, 160px);
-  font-weight: 700;
+  font-weight: 400;
+  letter-spacing: -0.04em;
   color: #FFFFFF;
   text-shadow: 0 2px 12px #000000;
 }
