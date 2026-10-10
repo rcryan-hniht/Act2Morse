@@ -1,0 +1,11 @@
+.git
+.agents
+.codex
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.env*
+frontend/public/wasm
+backend/models

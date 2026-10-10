@@ -698,6 +698,7 @@ body {
   gap: 16px;
   position: relative;
   width: 100%;
+  min-width: 0;
 }
 
 .portrait-container {
@@ -706,7 +707,7 @@ body {
   min-height: 280px;
   max-height: 380px;
   background-color: #000000;
-  border-radius: var(--radius-hero);
+  border-radius: 0;
   overflow: hidden;
   position: relative;
   box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.2);
@@ -1711,9 +1712,169 @@ body {
 }
 
 @media (max-width: 640px) {
+  body {
+    padding: 0;
+    align-items: flex-start;
+  }
+
+  .outer-frame {
+    border: none;
+    border-radius: 0;
+  }
+
+  .header-container {
+    padding: 12px 12px 0;
+  }
+
+  .nav-pill {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 16px 12px 12px;
+    border-radius: 20px;
+  }
+
+  .nav-brand {
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .nav-modes {
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 16px;
+  }
+
+  .nav-mode-btn {
+    flex: 1 1 45%;
+    justify-content: center;
+    padding: 8px;
+  }
+
+  .nav-link-chart {
+    flex: 1;
+    justify-content: center;
+    color: #B8B8B8;
+  }
+
+  .hero-section {
+    gap: 16px;
+    padding: 16px 12px;
+  }
+
+  .portrait-container {
+    aspect-ratio: 4 / 3;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .camera-top-controls {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .status-badge {
+    min-width: 0;
+    padding: 8px;
+    font-size: 10px;
+    overflow-wrap: anywhere;
+  }
+
+  .indicator-dot,
+  .btn-toggle-cam {
+    flex-shrink: 0;
+  }
+
+  .hero-floating-bar {
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .floating-bar-title {
+    font-size: 12px;
+  }
+
+  .floating-bar-desc {
+    white-space: normal;
+    line-height: 1.4;
+  }
+
+  .login-card,
+  .morse-console-panel,
+  .morse-flip-face {
+    padding: 12px;
+  }
+
+  .console-header,
+  .fin-tap-header,
+  .morse-chart-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .console-tools {
+    margin-left: auto;
+  }
+
+  .decoded-text-box {
+    flex-direction: column;
+  }
+
+  .decoded-result,
+  .rule-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .simulation-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .nav-mode-btn,
+  .nav-link-chart,
+  .btn-toggle-cam,
+  .btn-sim,
+  .flip-toggle-btn,
+  .docs-footer-link {
+    min-height: 44px;
+  }
+
+  .icon-btn-sm,
+  .floating-arrow-btn,
+  .welcome-close-btn {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+
+  .morse-chart-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .welcome-overlay {
+    padding: 12px;
+  }
+
+  .toast-notice {
+    right: 12px;
+    bottom: 12px;
+    max-width: calc(100% - 24px);
+    overflow-wrap: anywhere;
+  }
+
   .welcome-card {
     padding: 28px 20px 24px 20px;
     border-radius: 20px;
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
   }
   .welcome-title {
     font-size: 32px;

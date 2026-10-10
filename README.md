@@ -74,68 +74,57 @@ Communication is a fundamental human right. However, millions of people worldwid
 
 ---
 
-#  Installation
+## Installation with Docker
 
-### Prerequisites
+### Requirements
 
-```bash
-git clone https://github.com/rcryan-hniht/Act2Morse
-```
+- Docker installed with its daemon running (Docker Desktop or Docker Engine).
+- Git and Bash (on Windows, use WSL).
+- A browser and a webcam for gesture tracking. Manual Morse input also works without a webcam.
+- Internet access for the first image build and AI model download.
 
-- **Node.js** (v18+) & **pnpm** (or npm)
-- **Python** (v3.11+) & **uv** (or pip)
-- A working webcam
-
----
-
-### 1. Backend Setup (FastAPI & MediaPipe)
+### Start the application
 
 ```bash
-# Navigate to the backend directory
-cd backend
-
-# Install dependencies and sync environment with uv
-uv sync
-
-# Start the WebSocket inference server
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+git clone https://github.com/rcryan-hniht/Act2Morse.git
+cd Act2Morse
+./start.sh
 ```
 
-The backend server will download the models automatically on first launch (`MichalMlodawski/open-closed-eye-classification-mobilev2` for Blink mode and `opencv/handpose_estimation_mediapipe` for Fin mode) and serve the WebSocket endpoint at:
-`ws://localhost:8000/ws`
+The script builds the Docker image and runs both frontend and backend. You do
+not need to install Node.js, Python, pnpm, or uv on the host.
 
----
+Open **http://localhost:5173** in your browser. The backend health endpoint is
+**http://localhost:8000/health**, and its WebSocket endpoint is
+**ws://localhost:8000/ws**. Ports 5173 and 8000 must be available.
 
-### 2. Frontend Setup (Vite & TypeScript)
+On first startup, the backend downloads its AI models. Wait for
+`Application startup complete` in the terminal before starting camera tracking.
+Models are cached in the `act2morse-models` Docker volume and reused on later runs.
 
-```bash
-# Navigate to the frontend directory
-cd frontend
+Press **Ctrl+C** in the terminal to stop and remove the container. Run
+`./start.sh` again to restart; cached image layers and models are reused.
 
-# Install dependencies
-pnpm install
+The script binds both ports to localhost. Use the browser on the same computer;
+access from a phone or another computer requires a separate network and HTTPS setup.
 
-# Start the development server
-pnpm dev
-```
+## How to use Act2Morse
 
-Open your browser at **`http://localhost:5173`**.
-
----
-
-## 📖 How to Communicate with Act2Morse
-
-1. Click **Start Camera** (or **Launch Camera**) on the navbar or video overlay and grant camera permission.
-2. The HUD overlay will lock onto your face, displaying **`AI TRACKING • <score>`** in green.
-3. Select your preferred mode from the top navigation bar:
-   - **Blink2Morse**: Eye blink communication.
-   - **Fin2Morse**: Finger / Spacebar tactile tap communication.
-4. **Blinking rules (Blink2Morse)**:
-   - **Dot (`•`)**: Blink quickly and deliberately (~150ms – 400ms) and open your eyes. You will hear a short beep.
-   - **Dash (`—`)**: Close your eyes for ~0.8s – 1.0s and open them. You will hear a longer beep.
-   - **Letter Completion**: Keep your eyes open for **1.2 seconds**. The dots and dashes will assemble into a letter (e.g., `• —` becomes `A`).
-   - **Word Space**: Keep your eyes open for **2.5 seconds** to append a space between words.
-5. Click the **Transmit (↑)** button to copy the decoded sentence to your clipboard.
+1. Close the introduction dialog or select **Bắt đầu trải nghiệm**.
+2. Choose **Fin2Morse** (finger/touch input) or **Blink2Morse** (eye tracking, beta).
+3. For camera tracking, click **Launch Camera**, grant browser camera permission,
+   and position your hand or face in the webcam frame. Wait for the vision model to load.
+4. In **Fin2Morse**, touch/click and hold the tactile tap pad or hold **Spacebar**:
+   release before 380 ms for a dot (`•`), or hold longer for a dash (`—`).
+   You can also use the dot/dash buttons without launching the camera.
+5. In **Blink2Morse**, use deliberate short eye closures for dots and longer
+   closures for dashes. Timing depends on the active detection engine and its thresholds.
+6. Pause to finish a letter automatically, or use the **Space** button to finish
+   the current letter and add a word space. For example, dot then dash (`.-`) decodes to **A**.
+7. Read the result in **Morse Buffer & Translation**. Click the **↑** button to
+   finish the current letter and copy the decoded text. Use **Clear** to reset.
+8. Tap a character in **Morse Reference Chart** to hear its Morse sequence.
+   Open **Docs** for gesture instructions or use the sound button to mute audio.
 
 ---
 
@@ -148,9 +137,9 @@ Backend detection parameters can be customized via environment variables:
 | `CLOSE_THRESHOLD` | `0.5`   | Blendshape closure score to trigger eye-closed state (0.0 – 1.0) |
 | `OPEN_THRESHOLD`  | `0.25`  | Blendshape score to trigger eye-open state (hysteresis gap)      |
 | `MIN_BLINK_MS`    | `80`    | Minimum blink duration in milliseconds (filters micro-glitches)  |
-| `DOT_MAX_MS`      | `600`   | Maximum duration for a Dot; closures exceeding this are Dashes   |
-| `LETTER_GAP_MS`   | `1200`  | Open-eye pause duration to finalize a character                  |
-| `WORD_GAP_MS`     | `2500`  | Open-eye pause duration to insert a word space                   |
+| `DOT_MAX_MS`      | `380`   | Maximum duration for a Dot; closures exceeding this are Dashes   |
+| `LETTER_GAP_MS`   | `2200`  | Open-eye pause duration to finalize a character                  |
+| `WORD_GAP_MS`     | `5000`  | Open-eye pause duration to insert a word space                   |
 
 ---
 
