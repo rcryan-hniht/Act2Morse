@@ -53,7 +53,8 @@ export class BlinkWebSocketBridge {
   private failedAttempts: number = 0;
   private ws: WebSocket | null = null;
   private reconnectInterval: number = 3500;
-  private shouldReconnect: boolean = true;
+  private shouldReconnect: boolean = false;
+  private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private statusListeners: Array<(status: ConnectionStatus) => void> = [];
   private responseListeners: Array<(res: BackendResponse) => void> = [];
   private messageListeners: Array<(msg: BackendMessage) => void> = [];
@@ -76,6 +77,11 @@ export class BlinkWebSocketBridge {
   }
 
   public connect() {
+    if (this.ws && this.ws.readyState <= WebSocket.OPEN) return;
+    if (this.reconnectTimeoutId !== null) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
     this.shouldReconnect = true;
     this.setStatus('connecting');
 
@@ -125,7 +131,10 @@ export class BlinkWebSocketBridge {
         }
 
         if (this.shouldReconnect) {
-          setTimeout(() => this.connect(), this.reconnectInterval);
+          this.reconnectTimeoutId = setTimeout(() => {
+            this.reconnectTimeoutId = null;
+            if (this.shouldReconnect) this.connect();
+          }, this.reconnectInterval);
         }
       };
 
@@ -141,12 +150,20 @@ export class BlinkWebSocketBridge {
 
   public disconnect() {
     this.shouldReconnect = false;
+    if (this.reconnectTimeoutId !== null) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
     this.isAwaitingResponse = false;
     if (this.responseTimeoutId !== null) {
       clearTimeout(this.responseTimeoutId);
       this.responseTimeoutId = null;
     }
     if (this.ws) {
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
       this.ws.close();
       this.ws = null;
     }

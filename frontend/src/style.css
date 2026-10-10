@@ -1877,7 +1877,13 @@ body {
     flex-shrink: 0;
   }
 
+  .morse-flip-container {
+    height: 580px;
+  }
+
   .morse-chart-grid {
+    min-height: 0;
+    padding-bottom: 24px;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }

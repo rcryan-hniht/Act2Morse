@@ -232,6 +232,7 @@ async function toggleCamera() {
 
     if (success) {
       isCameraActive = true;
+      wsBridge.connect();
       if (heroPortraitImg) heroPortraitImg.style.display = 'none';
       webcamVideo.style.display = 'block';
       webcamCanvas.style.display = 'block';
@@ -259,8 +260,9 @@ async function toggleCamera() {
       showToast('Camera permission denied or camera unavailable');
     }
   } else {
-    cameraController.stop();
     isCameraActive = false;
+    wsBridge.disconnect();
+    cameraController.stop();
     webcamVideo.style.display = 'none';
     webcamCanvas.style.display = 'none';
     if (heroPortraitImg) heroPortraitImg.style.display = 'flex';
@@ -441,7 +443,6 @@ cameraController.onGestureAction((event: GestureActionEvent) => {
 wsBridge.onStatusChange((status: ConnectionStatus) => {
   if (status === 'connected') {
     wsBridge.sendMode(currentMode);
-    showToast('🟢 Connected to AI Backend (MichalMlodawski / OpenCV)');
     cameraController.setBackendState(true, null, false, false);
     if (isCameraActive) {
       camStatusDot.style.background = '#10B981';
@@ -535,8 +536,6 @@ wsBridge.onMessage((msg: BackendMessage) => {
   }
 });
 
-// Try connecting to backend in background (gracefully fails if backend not yet running)
-wsBridge.connect();
 
 /**
  * Tactile Hold Animation & Real-time Progress Tracking for Fin2Morse Tap Pad
